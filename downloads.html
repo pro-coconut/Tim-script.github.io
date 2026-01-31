@@ -18,8 +18,9 @@ button{margin-top:10px;padding:10px 14px;border:0;border-radius:8px;background:#
 .content{padding:10px}
 .title{font-weight:700;margin-bottom:4px}
 .actions{display:flex;gap:6px;margin-top:8px}
-.progress{height:22px;background:#1f2a44;border-radius:8px;overflow:hidden;margin-top:10px}
+.progress{height:20px;background:#1f2a44;border-radius:8px;overflow:hidden;margin-top:8px}
 .bar{height:100%;width:0%;background:#22c55e;text-align:center;font-size:12px}
+#status{margin-top:8px;color:#facc15;font-size:13px;white-space:pre-wrap}
 </style>
 </head>
 
@@ -28,7 +29,6 @@ button{margin-top:10px;padding:10px 14px;border:0;border-radius:8px;background:#
 
 <div class="box">
 <h3>Upload file mới</h3>
-
 <input id="token" placeholder="GitHub Token">
 <input id="name" placeholder="Tên file">
 <textarea id="desc" placeholder="Mô tả"></textarea>
@@ -37,7 +37,6 @@ button{margin-top:10px;padding:10px 14px;border:0;border-radius:8px;background:#
 <img id="preview" style="max-width:150px;margin-top:8px;display:none;border-radius:8px">
 
 <input type="file" id="file">
-
 <button onclick="upload()">Upload</button>
 
 <div class="progress"><div id="bar" class="bar">0%</div></div>
@@ -50,23 +49,19 @@ button{margin-top:10px;padding:10px 14px;border:0;border-radius:8px;background:#
 </div>
 
 <script>
-const REPO = "pro-coconut/tim-script.github.io";
+const REPO = "pro-coconut/Tim-script.github.io";
 const BRANCH = "main";
 
-let thumbFile = null;
-let mainFile = null;
+const tokenEl=token,nameEl=name,descEl=desc,thumbEl=thumb,fileEl=file,barEl=bar,statusEl=status,listEl=list;
 
-// FIX ANDROID: lưu file ngay khi chọn
-thumb.onchange = e=>{
-  thumbFile = e.target.files[0];
+thumbEl.onchange=e=>{
   const r=new FileReader();
   r.onload=()=>{preview.src=r.result;preview.style.display="block";}
-  r.readAsDataURL(thumbFile);
-};
+  r.readAsDataURL(e.target.files[0]);
+}
 
-file.onchange = e=>{
-  mainFile = e.target.files[0];
-};
+function setStatus(t){statusEl.innerText=t}
+function progress(p){barEl.style.width=p+"%";barEl.innerText=p+"%"}
 
 function b64(file){
   return new Promise(r=>{
@@ -76,50 +71,26 @@ function b64(file){
   });
 }
 
-function setBar(p){
-  bar.style.width=p+"%";
-  bar.innerText=p+"%";
-}
-
-async function upload(){
-  const token=tokenEl.value.trim();
-  const name=nameEl.value.trim();
-  const desc=descEl.value.trim();
-
-  if(!token||!name||!thumbFile||!mainFile){
-    alert("Thiếu dữ liệu");
-    return;
+async function ghFetch(url,options){
+  const res = await fetch(url,{
+    ...options,
+    headers:{
+      ...(options.headers||{}),
+      Authorization:"Bearer "+tokenEl.value.trim(),
+      Accept:"application/vnd.github+json"
+    }
+  });
+  const text = await res.text();
+  if(!res.ok){
+    throw new Error(text);
   }
-
-  setBar(10);
-  status.innerText="Upload thumbnail...";
-
-  const t=Date.now();
-  const thumbPath=`thumbs/${t}_${thumbFile.name}`;
-  const filePath=`files/${t}_${mainFile.name}`;
-
-  await putFile(thumbPath,await b64(thumbFile),token);
-
-  setBar(50);
-  status.innerText="Upload file...";
-
-  await putFile(filePath,await b64(mainFile),token);
-
-  setBar(80);
-  status.innerText="Cập nhật data...";
-
-  await updateData({name,desc,thumb:thumbPath,file:filePath},token);
-
-  setBar(100);
-  status.innerText="✅ Thành công!";
-  loadList();
+  return text ? JSON.parse(text) : {};
 }
 
-async function putFile(path,content,token){
-  await fetch(`https://api.github.com/repos/${REPO}/contents/${path}`,{
+async function putFile(path,content){
+  await ghFetch(`https://api.github.com/repos/${REPO}/contents/${path}`,{
     method:"PUT",
-    headers:{Authorization:"token "+token},
-    body:JSON.stringify({message:"upload",content})
+    body:JSON.stringify({message:"upload "+path,content})
   });
 }
 
@@ -128,28 +99,94 @@ async function getData(){
   return await res.json();
 }
 
-async function updateData(item,token){
-  const res=await fetch(`https://api.github.com/repos/${REPO}/contents/data.json`,{
-    headers:{Authorization:"token "+token}
-  });
-  const j=await res.json();
-  const data=JSON.parse(atob(j.content));
+async function updateData(item){
+  const j = await ghFetch(`https://api.github.com/repos/${REPO}/contents/data.json`,{});
+  const data = JSON.parse(atob(j.content));
   data.unshift(item);
 
-  await fetch(`https://api.github.com/repos/${REPO}/contents/data.json`,{
+  await ghFetch(`https://api.github.com/repos/${REPO}/contents/data.json`,{
     method:"PUT",
-    headers:{Authorization:"token "+token},
     body:JSON.stringify({
-      message:"update",
+      message:"update data",
       content:btoa(JSON.stringify(data,null,2)),
       sha:j.sha
     })
   });
 }
 
+async function upload(){
+  try{
+    progress(5);
+    setStatus("Đang kiểm tra dữ liệu...");
+
+    if(!tokenEl.value||!nameEl.value||!thumbEl.files[0]||!fileEl.files[0]){
+      throw new Error("Thiếu dữ liệu nhập vào");
+    }
+
+    const t=Date.now();
+    const thumbPath=`thumbs/${t}_${thumbEl.files[0].name}`;
+    const filePath=`files/${t}_${fileEl.files[0].name}`;
+
+    progress(15);
+    setStatus("Upload thumbnail...");
+    await putFile(thumbPath,await b64(thumbEl.files[0]));
+
+    progress(45);
+    setStatus("Upload file...");
+    await putFile(filePath,await b64(fileEl.files[0]));
+
+    progress(75);
+    setStatus("Cập nhật data.json...");
+    await updateData({name:nameEl.value,desc:descEl.value,thumb:thumbPath,file:filePath});
+
+    progress(100);
+    setStatus("✅ Upload thành công!");
+    loadList();
+  }
+  catch(e){
+    setStatus("❌ LỖI:\n"+e.message);
+  }
+}
+
+async function deleteFile(path){
+  const j = await ghFetch(`https://api.github.com/repos/${REPO}/contents/${path}`,{});
+  await ghFetch(`https://api.github.com/repos/${REPO}/contents/${path}`,{
+    method:"DELETE",
+    body:JSON.stringify({message:"delete "+path,sha:j.sha})
+  });
+}
+
+async function del(i){
+  try{
+    setStatus("Đang xóa...");
+    const data=await getData();
+    const item=data[i];
+
+    await deleteFile(item.thumb);
+    await deleteFile(item.file);
+
+    data.splice(i,1);
+
+    const j = await ghFetch(`https://api.github.com/repos/${REPO}/contents/data.json`,{});
+    await ghFetch(`https://api.github.com/repos/${REPO}/contents/data.json`,{
+      method:"PUT",
+      body:JSON.stringify({
+        message:"delete item",
+        content:btoa(JSON.stringify(data,null,2)),
+        sha:j.sha
+      })
+    });
+
+    setStatus("✅ Đã xóa");
+    loadList();
+  }catch(e){
+    setStatus("❌ Lỗi xóa:\n"+e.message);
+  }
+}
+
 async function loadList(){
   const data=await getData();
-  list.innerHTML=data.map((d,i)=>`
+  listEl.innerHTML=data.map((d,i)=>`
     <div class="card">
       <div class="thumb">
         <img src="https://raw.githubusercontent.com/${REPO}/${BRANCH}/${d.thumb}">
@@ -166,49 +203,6 @@ async function loadList(){
   `).join('');
 }
 
-async function del(i){
-  const token=tokenEl.value.trim();
-  if(!token) return alert("Nhập token để xóa");
-
-  const data=await getData();
-  const item=data[i];
-
-  await deleteFile(item.thumb,token);
-  await deleteFile(item.file,token);
-
-  data.splice(i,1);
-
-  const res=await fetch(`https://api.github.com/repos/${REPO}/contents/data.json`,{
-    headers:{Authorization:"token "+token}
-  });
-  const j=await res.json();
-
-  await fetch(`https://api.github.com/repos/${REPO}/contents/data.json`,{
-    method:"PUT",
-    headers:{Authorization:"token "+token},
-    body:JSON.stringify({
-      message:"delete",
-      content:btoa(JSON.stringify(data,null,2)),
-      sha:j.sha
-    })
-  });
-
-  loadList();
-}
-
-async function deleteFile(path,token){
-  const res=await fetch(`https://api.github.com/repos/${REPO}/contents/${path}`,{
-    headers:{Authorization:"token "+token}
-  });
-  const j=await res.json();
-  await fetch(`https://api.github.com/repos/${REPO}/contents/${path}`,{
-    method:"DELETE",
-    headers:{Authorization:"token "+token},
-    body:JSON.stringify({message:"delete",sha:j.sha})
-  });
-}
-
-const tokenEl=token,nameEl=name,descEl=desc,bar=bar,status=status,list=list;
 loadList();
 </script>
 </body>
