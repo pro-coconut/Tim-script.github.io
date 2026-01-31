@@ -152,6 +152,28 @@ h2{
   .thumb{height:130px}
   .logo{font-size:18px}
 }
+  .downloads-btn{
+  padding:12px 20px;
+  border-radius:14px;
+  text-decoration:none;
+  font-weight:700;
+  font-size:15px;
+  letter-spacing:.5px;
+  color:white;
+  background:linear-gradient(135deg,#f59e0b,#ef4444);
+  box-shadow:0 8px 22px rgba(239,68,68,.45);
+  transition:.3s;
+  display:flex;
+  align-items:center;
+  gap:8px;
+  white-space:nowrap;
+  border:1px solid #ffffff22;
+}
+
+.downloads-btn:hover{
+  transform:translateY(-3px) scale(1.03);
+  box-shadow:0 12px 30px rgba(239,68,68,.6);
+}
 </style>
 </head>
 
@@ -159,10 +181,16 @@ h2{
 
 <header>
   <div class="logo">tìm script của tâm dz</div>
+
   <div class="search-wrap">
     <input id="q" placeholder="Tìm script (vd: blox fruit)..." />
     <button onclick="search()">Tìm</button>
   </div>
+
+  <!-- NÚT SIÊU NỔI -->
+  <a href="downloads.html" class="downloads-btn">
+    📦 Kho tải file
+  </a>
 </header>
 
 <div class="container">
