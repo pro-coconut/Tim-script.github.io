@@ -192,7 +192,8 @@ function card(s){
   return `
     <div class="card" onclick="view('${s._id}')">
       <div class="thumb">
-        <img src="${thumb}" onerror="this.src='https://i.imgur.com/8Km9tLL.png'">
+        <img src="${thumb}"
+             onerror="this.onerror=null;this.src='https://i.ibb.co/8gbRfFsp/images.png'">
       </div>
       <div class="content">
         <div class="title">${s.title}</div>
