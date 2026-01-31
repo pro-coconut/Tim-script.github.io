@@ -1,171 +1,154 @@
 <!DOCTYPE html>
 <html lang="vi">
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Tìm Script</title>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>ScriptBlox Mini</title>
 
 <style>
-*{box-sizing:border-box}
-body{margin:0;font-family:Arial;background:#0b1220;color:#e6eef8}
-
-header{
-  padding:12px;
-  background:#0f172a;
-  display:flex;
-  flex-wrap:wrap;
-  gap:8px;
-  align-items:center;
-}
-
-.logo{color:#38bdf8;font-weight:bold}
-
-.search-wrap{
-  flex:1;
-  display:flex;
-  gap:8px;
-}
-
-input{
-  flex:1;
-  padding:12px;
-  border-radius:8px;
-  border:0;
-  font-size:16px;
-  direction:ltr;
-  text-align:left;
-  background:#0f1a28;
+body{
+  margin:0;
+  font-family: Arial, Helvetica, sans-serif;
+  background:#0f0f0f;
   color:white;
 }
 
-button{
-  border:0;
-  border-radius:8px;
-  padding:10px 12px;
-  cursor:pointer;
-  background:#38bdf8;
+header{
+  padding:15px;
+  text-align:center;
+  font-size:22px;
+  font-weight:bold;
+  background:#1a1a1a;
 }
 
-.container{padding:12px}
+.search-box{
+  padding:15px;
+  text-align:center;
+}
+
+.search-box input{
+  width:80%;
+  max-width:500px;
+  padding:12px;
+  font-size:16px;
+  border-radius:8px;
+  border:none;
+  outline:none;
+}
+
+.section-title{
+  font-size:20px;
+  margin:20px 15px 10px;
+}
+
 .grid{
   display:grid;
-  grid-template-columns:repeat(auto-fill,minmax(260px,1fr));
-  gap:12px;
+  grid-template-columns:repeat(auto-fill,minmax(170px,1fr));
+  gap:15px;
+  padding:15px;
 }
 
 .card{
-  background:#1e293b;
+  background:#1b1b1b;
   border-radius:10px;
   overflow:hidden;
   cursor:pointer;
+  transition:0.2s;
 }
 
-.thumb{
-  height:150px;
-  background:#071826;
+.card:hover{
+  transform:scale(1.03);
 }
 
-.thumb img{
+.card img{
   width:100%;
-  height:100%;
+  height:120px;
   object-fit:cover;
+  background:#222;
 }
 
-.content{padding:10px}
-.title{font-weight:bold;margin-bottom:6px}
-.meta{color:#94a3b8;font-size:13px}
-.loader{text-align:center;padding:20px;color:#94a3b8}
-h2{color:#38bdf8}
+.card .info{
+  padding:10px;
+}
+
+.card .title{
+  font-size:14px;
+  font-weight:bold;
+  height:38px;
+  overflow:hidden;
+}
+
+.card .game{
+  font-size:12px;
+  color:#aaa;
+  margin-top:4px;
+}
 </style>
 </head>
 
 <body>
 
-<header>
-  <div class="logo">tìm script của tâm dz</div>
+<header>ScriptBlox Mini</header>
 
-  <div class="search-wrap">
-    <input id="inputSearch" placeholder="Tìm script (blox fruit, admin...)" />
-    <button onclick="startSearch()">Tìm</button>
-  </div>
-</header>
-
-<div class="container">
-
-  <h2>🔎 Kết quả tìm kiếm</h2>
-  <div id="results" class="grid"></div>
-
-  <h2>🆕 Script mới nhất</h2>
-  <div id="latest" class="grid"></div>
-
+<div class="search-box">
+  <input id="searchInput" placeholder="Tìm script..." />
 </div>
 
+<div class="section-title">Script mới nhất</div>
+<div id="latest" class="grid"></div>
+
+<div class="section-title">Kết quả tìm kiếm</div>
+<div id="results" class="grid"></div>
+
 <script>
-const API = 'https://scriptblox.com/api/script/search';
+const API_BASE = "https://scriptblox.com/api/script";
 
-/* -------- THUMBNAIL API MỚI -------- */
-async function fetchThumbMap(ids){
-  if(!ids.length) return {};
-  const url = `https://thumbnails.roblox.com/v1/games/icons?universeIds=${ids.join(',')}&size=512x512&format=Png`;
-  try{
-    const res = await fetch(url);
-    const j = await res.json();
-    const map = {};
-    (j.data||[]).forEach(d=> map[d.targetId]=d.imageUrl);
-    return map;
-  }catch{
-    return {};
-  }
-}
+// Tạo card script
+function createCard(script){
+  const img = script.image || script.thumbnail || "https://i.imgur.com/8Km9tLL.png";
 
-function cardHTML(s, thumb){
   return `
-  <div class="card" onclick="openView('${s._id}')">
-    <div class="thumb">
-      ${thumb ? `<img src="${thumb}">` : ``}
-    </div>
-    <div class="content">
-      <div class="title">${s.title}</div>
-      <div class="meta">${s.game?.name||'-'}</div>
-      <div class="meta">👁 ${s.views||0}</div>
+  <div class="card" onclick="openScript('${script.slug}')">
+    <img src="${img}">
+    <div class="info">
+      <div class="title">${script.title}</div>
+      <div class="game">${script.game?.name || "Unknown Game"}</div>
     </div>
   </div>`;
 }
 
-async function render(list, el){
-  if(!list.length){
-    el.innerHTML='<div class="loader">Không có dữ liệu</div>';
-    return;
-  }
-
-  /* ---- FIX QUAN TRỌNG: gameId ---- */
-  const ids = list.map(s=>s.game?.gameId).filter(Boolean);
-  const thumbs = await fetchThumbMap(ids);
-
-  el.innerHTML = list.map(s=>cardHTML(s, thumbs[s.game?.gameId])).join('');
+function openScript(slug){
+  window.location.href = "view.html?slug=" + slug;
 }
 
+// Load script mới nhất
 async function loadLatest(){
-  const res = await fetch(API+'?q=script&max=12');
-  const j = await res.json();
-  render(j.result.scripts, document.getElementById('latest'));
+  const res = await fetch(`${API_BASE}?sortBy=createdAt&order=desc`);
+  const data = await res.json();
+  const scripts = data.result?.scripts || [];
+
+  document.getElementById("latest").innerHTML =
+    scripts.slice(0,20).map(createCard).join("");
 }
 
-async function startSearch(){
-  const q = document.getElementById('inputSearch').value.trim();
-  if(!q) return;
+// Tìm kiếm script
+async function searchScripts(keyword){
+  if(!keyword) return;
 
-  const res = await fetch(API+`?q=${encodeURIComponent(q)}&max=20`);
-  const j = await res.json();
-  render(j.result.scripts, document.getElementById('results'));
+  const res = await fetch(`${API_BASE}/search?q=${encodeURIComponent(keyword)}`);
+  const data = await res.json();
+  const scripts = data.result?.scripts || [];
+
+  document.getElementById("results").innerHTML =
+    scripts.map(createCard).join("");
 }
 
-function openView(id){
-  location.href = `view.html?id=${id}`;
-}
-
-document.getElementById('inputSearch')
-  .addEventListener('keydown',e=>{ if(e.key==='Enter') startSearch(); });
+// Sự kiện tìm kiếm
+document.getElementById("searchInput").addEventListener("keydown", e=>{
+  if(e.key === "Enter"){
+    searchScripts(e.target.value.trim());
+  }
+});
 
 loadLatest();
 </script>
