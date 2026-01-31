@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>ScriptBlox Mini — v5</title>
+<style>
+/* --------- Basic UI (dark, compact, responsive) --------- */
+*{box-sizing:border-box}
+:root{
+  --bg:#0b1220; --panel:#0f172a; --muted:#94a3b8; --accent:#38bdf8;
+  --card:#1e293b; --success:#22c55e;
+  --radius:10px;
+  font-family:Inter,Arial,Helvetica;
+}
+body{margin:0;background:var(--bg);color:#e6eef8}
+header{display:flex;gap:12px;align-items:center;padding:14px 18px;background:var(--panel);border-bottom:1px solid #172033}
+.logo{font-weight:700;color:var(--accent);font-size:18px}
+.search-wrap{flex:1;display:flex;gap:8px;align-items:center}
+input[type="search"]{width:100%;padding:10px 12px;border-radius:8px;border:0;background:#0f1a28;color:#e6eef8}
+.btn{background:var(--accent);border:none;padding:8px 10px;border-radius:8px;cursor:pointer}
+.small{padding:6px 8px;font-size:13px}
+.filters{display:flex;gap:8px;align-items:center}
+.container{max-width:1100px;margin:18px auto;padding:0 12px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px}
+.card{background:var(--card);border-radius:var(--radius);overflow:hidden;cursor:pointer;transition:transform .18s}
+.card:hover{transform:translateY(-6px)}
+.thumb{height:150px;background:#071826;display:flex;align-items:center;justify-content:center}
+.thumb img{width:100%;height:100%;object-fit:cover;display:block}
+.content{padding:12px}
+.title{font-weight:700;margin-bottom:6px}
+.meta{color:var(--muted);font-size:13px;margin-bottom:6px}
+.pager{text-align:center;margin-top:16px}
+.pager button{margin:4px;padding:8px 12px;border-radius:8px;border:0;background:var(--accent);cursor:pointer}
+.panel{background:var(--panel);padding:12px;border-radius:10px;margin-bottom:12px}
+.search-meta{display:flex;gap:10px;align-items:center;color:var(--muted);font-size:13px}
+.route-hidden{display:none}
+.code-block{background:#071827;padding:12px;border-radius:8px;overflow:auto;max-height:420px}
+.footer{color:var(--muted);text-align:center;margin-top:18px;padding:8px 0}
+.badge{background:#0b1620;padding:4px 8px;border-radius:999px;font-size:12px;color:var(--muted)}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">ScriptBlox Mini</div>
+
+  <div class="search-wrap">
+    <input id="inputSearch" type="search" placeholder="Tìm script (ví dụ: blox fruit, admin)..." />
+    <button id="btnSearch" class="btn small">Tìm</button>
+    <div style="width:8px"></div>
+    <button id="btnHistory" class="small" title="Lịch sử">📜</button>
+  </div>
+
+  <div class="filters">
+    <button class="small btn" data-route="#/">Home</button>
+    <button class="small" id="navVerified">Verified</button>
+    <button class="small" id="navTrending">Trending</button>
+  </div>
+</header>
+
+<main class="container">
+  <!-- HOME / SEARCH VIEW -->
+  <section id="view-list" class="panel">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+      <div class="search-meta"><span id="searchInfo">Nhập từ khóa để bắt đầu</span></div>
+      <div>
+        <select id="selectMax" class="small">
+            <option value="10">10 / trang</option>
+            <option value="20">20 / trang (max)</option>
+        </select>
+        <button id="btnClearCache" class="small">Xóa cache</button>
+      </div>
+    </div>
+
+    <div id="grid" class="grid"></div>
+    <div id="pager" class="pager"></div>
+  </section>
+
+  <!-- SCRIPT DETAIL VIEW -->
+  <section id="view-detail" class="panel route-hidden">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+      <div>
+        <button onclick="navigateTo('#/')" class="small">← Quay lại</button>
+      </div>
+      <div id="detailMeta" class="search-meta"></div>
+    </div>
+
+    <h2 id="detailTitle">Đang tải...</h2>
+    <div id="detailInfo" class="meta"></div>
+    <div id="detailCode" class="code-block">...</div>
+    <div style="margin-top:8px">
+      <button id="btnCopy" class="btn small">Copy Script</button>
+      <a id="openOnScriptBlox" class="small badge" target="_blank" rel="noopener">Mở trên ScriptBlox</a>
+    </div>
+  </section>
+
+  <!-- TRENDING VIEW (local-based) -->
+  <section id="view-trending" class="panel route-hidden">
+    <h3>Trending (dựa trên lịch sử tìm kiếm cục bộ)</h3>
+    <div id="trendingList"></div>
+  </section>
+
+  <div class="footer">Powered by ScriptBlox • ScriptBlox Mini v5</div>
+</main>
+
+<script>
+/* ======= Helper utils ======= */
+const API_BASE = 'https://scriptblox.com/api';
+const ROBLOX_THUMB = 'https://thumbnails.roblox.com/v1/places/gameicons';
+const CACHE_TTL = 5 * 60 * 1000; // 5 minutes cache for search
+
+function escapeHtml(s){ if(!s) return ''; return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function qs(sel, root=document){ return root.querySelector(sel); }
+function qsa(sel, root=document){ return Array.from(root.querySelectorAll(sel)); }
+
+function setRouteView(hash){
+  qs('#view-list').classList.toggle('route-hidden', !(hash==='/' || hash.startsWith('#/search')));
+  qs('#view-detail').classList.toggle('route-hidden', !(hash.startsWith('#/script/')));
+  qs('#view-trending').classList.toggle('route-hidden', !(hash.startsWith('#/trending')));
+}
+
+/* ======= Local cache & trending ======= */
+function cacheSet(key, data){
+  const payload = { ts: Date.now(), data };
+  localStorage.setItem('cache:'+key, JSON.stringify(payload));
+}
+function cacheGet(key){
+  try{
+    const raw = localStorage.getItem('cache:'+key); if(!raw) return null;
+    const p = JSON.parse(raw); if(Date.now()-p.ts > CACHE_TTL) return null;
+    return p.data;
+  }catch{ return null; }
+}
+function clearCache(){ Object.keys(localStorage).forEach(k=>{ if(k.startsWith('cache:')) localStorage.removeItem(k); }); alert('Cache đã xóa') }
+
+function saveSearchHistory(q){
+  if(!q) return;
+  let hist = JSON.parse(localStorage.getItem('sb_history')||'[]');
+  const idx = hist.findIndex(x=>x.q===q);
+  if(idx>=0) { hist[idx].count++; hist.unshift(hist.splice(idx,1)[0]; }
+  else hist.unshift({q, count:1, ts:Date.now()});
+  if(hist.length>30) hist = hist.slice(0,30);
+  localStorage.setItem('sb_history', JSON.stringify(hist));
+}
+function getTrendingLocal(limit=8){
+  const hist = JSON.parse(localStorage.getItem('sb_history')||'[]');
+  return hist.slice(0,limit);
+}
+
+/* ======= Thumbnails loader with concurrency limit ======= */
+async function fetchThumbnailsForScripts(scripts){
+  // gather placeIds
+  const placeIds = scripts.map(s => s.game?.placeId).filter(Boolean);
+  if(placeIds.length===0) return {};
+  const unique = Array.from(new Set(placeIds));
+  const CHUNK = 20; // thumbnails API supports multiple ids; do in chunks
+  let map = {};
+  for(let i=0;i<unique.length;i+=CHUNK){
+    const ids = unique.slice(i,i+CHUNK).join(',');
+    try{
+      const res = await fetch(`${ROBLOX_THUMB}?placeIds=${ids}&size=512x512&format=Png`);
+      if(!res.ok) continue;
+      const j = await res.json();
+      (j.data||[]).forEach(d=>{ if(d && d.imageUrl) map[d.targetId]=d.imageUrl; });
+    }catch(e){ /* ignore */ }
+  }
+  return map;
+}
+
+/* ======= Rendering grid ======= */
+const gridEl = qs('#grid');
+const pagerEl = qs('#pager');
+const inputEl = qs('#inputSearch');
+const maxSelect = qs('#selectMax');
+const searchInfo = qs('#searchInfo');
+
+let currentQuery = '';
+let currentPage = 1;
+let currentMax = parseInt(maxSelect.value)||10;
+let currentFilter = ''; // e.g. verified/universal/key
+
+async function searchScripts(q, page=1, max=10, filter=''){
+  const key = `search:${q}:${page}:${max}:${filter}`;
+  const cached = cacheGet(key);
+  if(cached) return cached;
+  const url = new URL(API_BASE + '/script/search');
+  url.searchParams.set('q', q);
+  url.searchParams.set('page', page);
+  url.searchParams.set('max', max);
+  if(filter) url.searchParams.set(filter, 'true');
+
+  const res = await fetch(url.toString());
+  if(!res.ok) throw new Error('HTTP ' + res.status);
+  const j = await res.json();
+  cacheSet(key, j);
+  return j;
+}
+
+function renderCards(scripts, thumbsMap){
+  gridEl.innerHTML = '';
+  if(!scripts || scripts.length===0){ gridEl.innerHTML = '<div style="text-align:center;color:var(--muted)">Không tìm thấy</div>'; return; }
+
+  scripts.forEach(s=>{
+    const card = document.createElement('div');
+    card.className = 'card';
+    card.innerHTML = `
+      <div class="thumb">
+        ${ thumbsMap[s.game?.placeId] ? `<img data-src="${thumbsMap[s.game.placeId]}" alt="${escapeHtml(s.game?.name||'')}" />` : '<div style="color:var(--muted)">No Image</div>' }
+      </div>
+      <div class="content">
+        <div class="title">${escapeHtml(s.title)}</div>
+        <div class="meta">Game: ${escapeHtml(s.game?.name||'-')}</div>
+        <div class="meta">Tác giả: ${escapeHtml(s.owner?.username||'unknown')} · 👁 ${s.views||0}</div>
+      </div>
+    `;
+    card.onclick = ()=>navigateTo('#/script/' + s._id);
+    gridEl.appendChild(card);
+  });
+
+  // lazy-load images
+  lazyLoadImages();
+}
+
+function renderPager(totalPages){
+  pagerEl.innerHTML = '';
+  if(!totalPages || totalPages<=1) return;
+  const prev = document.createElement('button'); prev.textContent='‹ Prev';
+  prev.disabled = (currentPage<=1);
+  prev.onclick = ()=>{ currentPage--; doSearch(); };
+  const next = document.createElement('button'); next.textContent='Next ›';
+  next.disabled = (currentPage>=totalPages);
+  next.onclick = ()=>{ currentPage++; doSearch(); };
+  pagerEl.appendChild(prev);
+  const info = document.createElement('span'); info.textContent = ` Trang ${currentPage} / ${totalPages} `; info.style.margin='0 8px';
+  pagerEl.appendChild(info);
+  pagerEl.appendChild(next);
+}
+
+/* ======= lazy load helper ======= */
+function lazyLoadImages(){
+  const imgs = Array.from(document.querySelectorAll('img[data-src]'));
+  if('IntersectionObserver' in window){
+    const io = new IntersectionObserver((entries, obs) => {
+      entries.forEach(e=>{
+        if(e.isIntersecting){
+          const img = e.target;
+          img.src = img.dataset.src;
+          img.removeAttribute('data-src');
+          obs.unobserve(img);
+        }
+      });
+    }, {rootMargin:'200px'});
+    imgs.forEach(i=>io.observe(i));
+  } else {
+    // fallback: load all
+    imgs.forEach(i=>{ i.src = i.dataset.src; i.removeAttribute('data-src'); });
+  }
+}
+
+/* ======= Main search flow with thumbnail fetching ======= */
+async function doSearch(){
+  const q = currentQuery.trim();
+  if(!q){ gridEl.innerHTML=''; searchInfo.textContent = 'Nhập từ khóa để bắt đầu'; return; }
+
+  searchInfo.textContent = `Đang tìm: "${q}" · Trang ${currentPage}`;
+  gridEl.innerHTML = '<div style="padding:30px;text-align:center">Đang tải...</div>';
+  try{
+    const j = await searchScripts(q, currentPage, currentMax, currentFilter);
+    const scripts = j.result?.scripts || [];
+    const totalPages = j.result?.totalPages || 1;
+
+    // fetch thumbnails map
+    const thumbs = await fetchThumbnailsForScripts(scripts);
+    renderCards(scripts, thumbs);
+    renderPager(totalPages);
+
+    // save trending locally
+    saveSearchHistory(q);
+  }catch(err){
+    console.error(err);
+    gridEl.innerHTML = `<div style="color:salmon;padding:12px">Lỗi khi gọi API: ${escapeHtml(err.message)}</div>`;
+  }
+}
+
+/* ======= Detail view ======= */
+async function loadDetail(id){
+  setRouteView('#/script/' + id);
+  try{
+    const res = await fetch(`${API_BASE}/script/${id}`);
+    const j = await res.json();
+    const s = j.script;
+    qs('#detailTitle').innerText = s.title || '—';
+    qs('#detailInfo').innerText = `Game: ${s.game?.name || '-'} · Tác giả: ${s.owner?.username || '-'} · 👁 ${s.views || 0}`;
+    qs('#detailCode').innerText = s.script || '[Không có script]';
+    qs('#openOnScriptBlox').href = `https://scriptblox.com/script/${s.slug || s._id}`;
+    qs('#btnCopy').onclick = ()=>{ navigator.clipboard.writeText(s.script||''); alert('Đã copy!'); };
+  }catch(e){
+    console.error(e);
+    qs('#detailTitle').innerText = 'Lỗi tải script';
+    qs('#detailCode').innerText = e.message;
+  }
+}
+
+/* ======= Routing & UI events ======= */
+function navigateTo(hash){
+  location.hash = hash;
+  onHashChange();
+}
+function onHashChange(){
+  const h = location.hash || '#/';
+  setRouteView(h);
+  if(h.startsWith('#/script/')) {
+    const id = h.split('/')[2];
+    loadDetail(id);
+  } else if(h.startsWith('#/trending')) {
+    renderTrending();
+  } else {
+    // home/search view
+  }
+}
+
+/* ======= Trending (local) render ======= */
+function renderTrending(){
+  const list = getTrendingLocal(12);
+  const wrap = qs('#trendingList');
+  if(!list || list.length===0){ wrap.innerHTML = '<div style="color:var(--muted)">Chưa có dữ liệu trending (chưa có lịch sử tìm kiếm)</div>'; return; }
+  wrap.innerHTML = '';
+  list.forEach(item=>{
+    const b = document.createElement('button');
+    b.className = 'small';
+    b.style.margin='6px';
+    b.textContent = `${item.q} (${item.count})`;
+    b.onclick = ()=>{ inputEl.value = item.q; currentQuery = item.q; currentPage = 1; navigateTo('#/'); doSearch(); };
+    wrap.appendChild(b);
+  });
+}
+
+/* ======= Events binding ======= */
+qs('#btnSearch').addEventListener('click', ()=>{ currentQuery = inputEl.value; currentPage = 1; doSearch(); });
+inputEl.addEventListener('keydown', (e)=>{ if(e.key==='Enter'){ currentQuery = inputEl.value; currentPage = 1; doSearch(); }});
+qs('#btnHistory').addEventListener('click', ()=> {
+  const hist = JSON.parse(localStorage.getItem('sb_history')||'[]');
+  if(!hist.length) return alert('Chưa có lịch sử tìm kiếm');
+  const text = hist.map(h=>`${h.q} (${h.count})`).join('\n');
+  const pick = prompt('Lịch sử tìm kiếm:\n'+ text);
+  if(pick){ inputEl.value = pick; currentQuery = pick; currentPage = 1; doSearch(); }
+});
+qs('#navVerified').addEventListener('click', ()=>{ currentFilter = 'verified'; currentQuery = inputEl.value || ''; currentPage=1; doSearch(); navigateTo('#/'); });
+qs('#navTrending').addEventListener('click', ()=>{ navigateTo('#/trending'); });
+qs('#btnClearCache').addEventListener('click', clearCache);
+maxSelect.addEventListener('change', ()=>{ currentMax = parseInt(maxSelect.value); currentPage = 1; doSearch(); });
+
+// quick route buttons
+qsa('header .filters button').forEach(b=>b.addEventListener('click', e=>{ const h = e.target.dataset.route || '#/'; navigateTo(h); }));
+
+// initial
+onHashChange();
+
+// register service worker (if available)
+if('serviceWorker' in navigator){
+  navigator.serviceWorker.register('sw.js').catch(()=>{/* ignore */});
+}
+</script>
+</body>
+</html>
