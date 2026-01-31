@@ -15,7 +15,7 @@
   header{display:flex;gap:12px;align-items:center;padding:12px 16px;background:var(--panel);border-bottom:1px solid #172033}
   .logo{font-weight:700;color:var(--accent);font-size:18px}
   .search-wrap{flex:1;display:flex;gap:8px;align-items:center}
-  input[type="search"]{width:100%;padding:10px 12px;border-radius:8px;border:0;background:#0f1a28;color:#e6eef8}
+  input[type="search"]{width:100%;padding:10px 12px;border-radius:8px;border:0;background:#0f1a28;color:#e6eef8; min-width:0}
   .btn{background:var(--accent);border:none;padding:8px 10px;border-radius:8px;cursor:pointer;color:#04293a}
   .small{padding:6px 8px;font-size:13px;border-radius:8px;border:0;cursor:pointer}
   .filters{display:flex;gap:8px;align-items:center}
@@ -41,7 +41,6 @@
 </style>
 </head>
 <body>
-
 <header>
   <div class="logo">tìm script của tâm dz</div>
 
@@ -127,11 +126,9 @@ let currentQuery = '';
 let currentPage = 1;
 let currentMax = parseInt(selectMax.value) || 10;
 let currentMode = 'home'; // 'home'|'search'|'verified'|'trending'
-let debounceTimer = null;
 
 /* ---------- Thumbnail batching ---------- */
 async function fetchThumbMap(placeIds){
-  // placeIds: array of strings (unique)
   if(!placeIds || placeIds.length===0) return {};
   const unique = Array.from(new Set(placeIds));
   const map = {};
@@ -144,7 +141,7 @@ async function fetchThumbMap(placeIds){
       const j = await res.json();
       (j.data||[]).forEach(d => { if(d && d.targetId) map[d.targetId] = d.imageUrl || ''; });
     }catch(e){
-      // ignore per-chunk errors
+      // ignore chunk errors
     }
   }
   return map;
@@ -170,18 +167,22 @@ function attachCardClicks(container){
   });
 }
 
-/* ---------- Fetch/search flow ---------- */
+/* ---------- Fetch/search flow (fixed: default searchTerm when q empty) ---------- */
 async function apiSearch(q,page=1,max=10, filter=''){
-  const key = `search:${q}:${page}:${max}:${filter}`;
+  // Important: ScriptBlox search API gives empty result when q is empty.
+  // Use default term 'script' when q is falsy to get a feed / "newest" scripts.
+  const searchTerm = (q && String(q).trim()) ? String(q).trim() : 'script';
+  const key = `search:${searchTerm}:${page}:${max}:${filter}`;
   const cached = readCache(key);
   if(cached) return cached;
+
   const url = new URL(SEARCH_ENDPOINT);
-  url.searchParams.set('q', q || '');
+  url.searchParams.set('q', searchTerm);
   url.searchParams.set('page', page);
   url.searchParams.set('max', max);
   if(filter) url.searchParams.set(filter,'true');
-  // try to get newest scripts when home: use sortBy if supported (best-effort)
-  if(currentMode === 'home') { url.searchParams.set('sortBy','createdAt'); url.searchParams.set('order','desc'); }
+
+  // NOTE: do NOT set unsupported params like sortBy/order (ScriptBlox API may reject silently).
   try{
     const res = await fetch(url.toString());
     if(!res.ok) throw new Error('HTTP ' + res.status);
@@ -189,7 +190,6 @@ async function apiSearch(q,page=1,max=10, filter=''){
     saveCache(key, j);
     return j;
   }catch(err){
-    // if API fails, return a friendly object
     return { error: err.message || 'Lỗi API' };
   }
 }
@@ -200,10 +200,8 @@ async function renderScriptsList(scripts, container){
     container.innerHTML = '<div class="loader">Không có dữ liệu</div>';
     return;
   }
-  // collect placeIds
   const placeIds = scripts.map(s => s.game?.placeId).filter(Boolean);
   const thumbMap = await fetchThumbMap(placeIds);
-  // build HTML
   const html = scripts.map(s => createCardHTML(s, thumbMap[s.game?.placeId] || '')).join('');
   container.innerHTML = html;
   attachCardClicks(container);
@@ -213,7 +211,7 @@ async function renderScriptsList(scripts, container){
 async function loadLatest(){
   searchInfo.textContent = 'Đang tải script mới...';
   latestEl.innerHTML = '<div class="loader">Đang tải...</div>';
-  const j = await apiSearch('', 1, 12, '');
+  const j = await apiSearch('', 1, 12, ''); // apiSearch now uses default 'script'
   if(j.error){ latestEl.innerHTML = `<div class="loader">Lỗi: ${escapeHtml(j.error)}</div>`; return; }
   const scripts = j.result?.scripts || [];
   await renderScriptsList(scripts, latestEl);
@@ -221,13 +219,13 @@ async function loadLatest(){
 }
 
 async function loadPage(){
-  // determine params
   let q = '';
   let filter = '';
   if(currentMode === 'search'){ q = currentQuery; filter = ''; }
-  if(currentMode === 'verified'){ q = ''; filter = 'verified'; }
-  if(currentMode === 'trending'){ q = 'blox'; filter = ''; } // fallback trending query
-  searchInfo.textContent = `Đang tìm: "${q||'(mặc định)'}" · Trang ${currentPage}`;
+  if(currentMode === 'verified'){ q = currentQuery || ''; filter = 'verified'; }
+  if(currentMode === 'trending'){ q = 'blox'; filter = ''; } // simple trending query fallback
+
+  searchInfo.textContent = `Đang tìm: "${(q && q.trim()) ? q : '(mặc định)'}" · Trang ${currentPage}`;
   resultsEl.innerHTML = '<div class="loader">Đang tìm...</div>';
   pagerEl.innerHTML = '';
 
@@ -237,7 +235,7 @@ async function loadPage(){
   const totalPages = j.result?.totalPages || 1;
   await renderScriptsList(scripts, resultsEl);
   renderPager(totalPages);
-  // save search history locally
+
   if(currentMode === 'search' && currentQuery) saveSearchHistory(currentQuery);
 }
 
@@ -305,6 +303,5 @@ if('serviceWorker' in navigator){
   navigator.serviceWorker.register('sw.js').catch(()=>{/* ignore */});
 }
 </script>
-
 </body>
 </html>
