@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Kho tải file</title>
+
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700&display=swap" rel="stylesheet">
+
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{
+  font-family:Poppins,Arial;
+  background:#0b1220;
+  color:#e6eef8;
+}
+header{
+  padding:16px;
+  background:#0f172a;
+  display:flex;
+  flex-wrap:wrap;
+  gap:10px;
+  align-items:center;
+  justify-content:space-between;
+}
+h1{color:#38bdf8;font-size:20px}
+.container{max-width:1200px;margin:auto;padding:20px}
+
+.search{
+  margin:10px 0 20px;
+  display:flex;
+  gap:10px;
+}
+.search input, .search select{
+  padding:10px;
+  border-radius:8px;
+  border:none;
+  background:#1e293b;
+  color:white;
+}
+
+.grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fill,minmax(260px,1fr));
+  gap:18px;
+}
+
+.card{
+  background:#1e293b;
+  border-radius:14px;
+  overflow:hidden;
+  border:1px solid #1f2a44;
+  transition:.25s;
+}
+.card:hover{transform:translateY(-6px)}
+
+.thumb{height:150px}
+.thumb img{width:100%;height:100%;object-fit:cover}
+
+.content{padding:12px}
+.title{font-weight:700;margin-bottom:6px}
+.desc{font-size:13px;color:#94a3b8;margin-bottom:8px;min-height:40px}
+.cat{font-size:12px;color:#38bdf8;margin-bottom:8px}
+
+.btn{
+  padding:6px 10px;
+  border-radius:6px;
+  text-decoration:none;
+  font-weight:600;
+  cursor:pointer;
+  display:inline-block;
+  margin-right:6px;
+}
+.download{background:#38bdf8;color:#04293a}
+.delete{background:#ef4444;color:white}
+
+.upload{
+  background:#111827;
+  padding:16px;
+  border-radius:12px;
+  margin-bottom:25px;
+}
+.upload input,.upload textarea,.upload select{
+  width:100%;
+  margin:6px 0;
+  padding:8px;
+  border-radius:6px;
+  border:none;
+}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Kho tải file</h1>
+</header>
+
+<div class="container">
+
+  <div class="upload">
+    <h3>Upload file mới</h3>
+    <input id="token" placeholder="GitHub Token">
+    <input id="name" placeholder="Tên file">
+    <textarea id="desc" placeholder="Mô tả"></textarea>
+    <select id="cat">
+      <option>Android</option>
+      <option>PC</option>
+      <option>Khác</option>
+    </select>
+    Thumbnail: <input type="file" id="thumbFile">
+    File tải: <input type="file" id="mainFile">
+    <button class="btn download" onclick="upload()">Upload</button>
+  </div>
+
+  <div class="search">
+    <input id="search" placeholder="Tìm file..." oninput="render()">
+    <select id="filter" onchange="render()">
+      <option value="">Tất cả</option>
+      <option>Android</option>
+      <option>PC</option>
+      <option>Khác</option>
+    </select>
+  </div>
+
+  <div class="grid" id="list"></div>
+</div>
+
+<script>
+const USER = "pro-coconut";
+const REPO = "https://github.com/pro-coconut/Tim-script.github.io";
+const BRANCH = "main";
+
+let FILES = [];
+
+async function loadFiles(){
+  const res = await fetch('files.json');
+  FILES = await res.json();
+  render();
+}
+
+function render(){
+  const q = search.value.toLowerCase();
+  const f = filter.value;
+
+  const show = FILES.filter(x =>
+    x.name.toLowerCase().includes(q) &&
+    (!f || x.cat===f)
+  );
+
+  list.innerHTML = show.map((f,i)=>`
+    <div class="card">
+      <div class="thumb"><img src="${f.thumb}"></div>
+      <div class="content">
+        <div class="title">${f.name}</div>
+        <div class="cat">${f.cat}</div>
+        <div class="desc">${f.desc}</div>
+        <a class="btn download" href="${f.file}" download>Tải</a>
+        <button class="btn delete" onclick="del(${i})">Xoá</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+function toBase64(file){
+  return new Promise(r=>{
+    const rd=new FileReader();
+    rd.onload=()=>r(rd.result.split(',')[1]);
+    rd.readAsDataURL(file);
+  });
+}
+
+async function uploadToGitHub(path,content,token){
+  await fetch(`https://api.github.com/repos/${USER}/${REPO}/contents/${path}`,{
+    method:"PUT",
+    headers:{
+      Authorization:"token "+token,
+      "Content-Type":"application/json"
+    },
+    body:JSON.stringify({
+      message:"upload",
+      content:content,
+      branch:BRANCH
+    })
+  });
+}
+
+async function upload(){
+  const tokenVal = token.value.trim();
+  const thumb = thumbFile.files[0];
+  const file = mainFile.files[0];
+
+  const t64 = await toBase64(thumb);
+  const f64 = await toBase64(file);
+
+  const tp = `uploads/${Date.now()}_${thumb.name}`;
+  const fp = `uploads/${Date.now()}_${file.name}`;
+
+  await uploadToGitHub(tp,t64,tokenVal);
+  await uploadToGitHub(fp,f64,tokenVal);
+
+  const thumbUrl = `https://raw.githubusercontent.com/${USER}/${REPO}/${BRANCH}/${tp}`;
+  const fileUrl = `https://raw.githubusercontent.com/${USER}/${REPO}/${BRANCH}/${fp}`;
+
+  FILES.unshift({
+    name:name.value,
+    desc:desc.value,
+    cat:cat.value,
+    thumb:thumbUrl,
+    file:fileUrl
+  });
+
+  await uploadToGitHub("files.json",btoa(JSON.stringify(FILES,null,2)),tokenVal);
+
+  render();
+  alert("Upload xong!");
+}
+
+async function del(i){
+  if(!confirm("Xoá file này?"))return;
+  FILES.splice(i,1);
+  const tokenVal = token.value.trim();
+  await uploadToGitHub("files.json",btoa(JSON.stringify(FILES,null,2)),tokenVal);
+  render();
+}
+
+loadFiles();
+</script>
+</body>
+</html>
