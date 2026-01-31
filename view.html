@@ -1,62 +1,68 @@
 <!DOCTYPE html>
 <html lang="vi">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>ScriptBlox Mini — View Script</title>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>ScriptBlox Mini — View</title>
 <style>
-body{margin:0;font-family:Inter,Arial;background:#0b1220;color:white;padding:20px}
-.header{display:flex;align-items:center;gap:12px;margin-bottom:12px}
-.back{color:#38bdf8;cursor:pointer}
-h2{margin:10px 0}
-.meta{color:#94a3b8;margin-bottom:10px}
-pre{background:#1e293b;padding:15px;border-radius:10px;overflow:auto;max-height:60vh}
-button{margin-top:10px;padding:10px 15px;border:none;border-radius:8px;background:#22c55e;color:white;cursor:pointer}
-a.openLink{display:inline-block;margin-left:10px;padding:8px 10px;border-radius:8px;background:#0b1620;color:#94a3b8;text-decoration:none}
+  body{margin:0;font-family:Inter,Arial;background:#0b1220;color:#e6eef8;padding:18px}
+  .back{color:#38bdf8;cursor:pointer;margin-bottom:12px;display:inline-block}
+  h1{margin:8px 0}
+  .meta{color:#94a3b8;margin-bottom:10px}
+  .code{background:#071827;padding:12px;border-radius:10px;overflow:auto;max-height:60vh;white-space:pre-wrap;font-family:monospace}
+  .btn{background:#22c55e;border:none;padding:8px 12px;border-radius:8px;color:white;cursor:pointer}
+  a.link{margin-left:10px;color:#94a3b8;text-decoration:none;background:#0b1620;padding:6px 8px;border-radius:8px}
 </style>
 </head>
 <body>
 
-<div class="header">
-  <div class="back" onclick="history.back()">← Quay lại</div>
-  <div style="flex:1"></div>
-</div>
+<div class="back" onclick="history.back()">← Quay lại</div>
 
-<h2 id="title">Đang tải...</h2>
+<h1 id="title">Đang tải...</h1>
 <div id="info" class="meta"></div>
 
-<pre id="code">...</pre>
-<div>
-  <button id="btnCopy">Copy Script</button>
-  <a id="openOnScriptBlox" class="openLink" target="_blank" rel="noopener">Mở trên ScriptBlox</a>
+<div id="code" class="code">...</div>
+
+<div style="margin-top:10px">
+  <button id="btnCopy" class="btn">Copy Script</button>
+  <a id="openOnScriptBlox" class="link" target="_blank" rel="noopener">Mở trên ScriptBlox</a>
 </div>
 
 <script>
+const API_BASE = 'https://scriptblox.com/api';
 const params = new URLSearchParams(window.location.search);
-const id = params.get("id");
+const id = params.get('id');
 
-async function load(){
-    if(!id){ document.getElementById("title").innerText = 'ID không hợp lệ'; return; }
-    try{
-        const res = await fetch(`https://scriptblox.com/api/script/${id}`);
-        if(!res.ok) throw new Error('HTTP ' + res.status);
-        const data = await res.json();
-        const s = data.script || data.result || {};
-        document.getElementById("title").innerText = s.title || '—';
-        document.getElementById("info").innerText = `Game: ${s.game?.name || '-'} | Tác giả: ${s.owner?.username || '-'} | 👁 ${s.views || 0}`;
-        document.getElementById("code").innerText = s.script || '[Không có script]';
-        document.getElementById("openOnScriptBlox").href = `https://scriptblox.com/script/${s.slug || s._id || id}`;
-        document.getElementById("btnCopy").onclick = ()=>{ navigator.clipboard.writeText(s.script||''); alert('Đã copy!'); };
-    }catch(e){
-        console.error(e);
-        document.getElementById("title").innerText = 'Lỗi tải script';
-        document.getElementById("code").innerText = e.message;
-    }
+const titleEl = document.getElementById('title');
+const infoEl = document.getElementById('info');
+const codeEl = document.getElementById('code');
+const btnCopy = document.getElementById('btnCopy');
+const openLink = document.getElementById('openOnScriptBlox');
+
+async function loadScript(){
+  if(!id){ titleEl.innerText = 'ID không hợp lệ'; codeEl.innerText = ''; return; }
+  titleEl.innerText = 'Đang tải...';
+  try{
+    const res = await fetch(`${API_BASE}/script/${id}`);
+    if(!res.ok) throw new Error('HTTP ' + res.status);
+    const j = await res.json();
+    const s = j.script || j.result || {};
+    titleEl.innerText = s.title || '—';
+    infoEl.innerText = `Game: ${s.game?.name || '-'} · Tác giả: ${s.owner?.username || '-'} · 👁 ${s.views || 0}`;
+    codeEl.innerText = s.script || '[Không có script]';
+    openLink.href = `https://scriptblox.com/script/${s.slug || s._id || id}`;
+    btnCopy.onclick = ()=>{ navigator.clipboard.writeText(s.script || '').then(()=>alert('Đã copy!')).catch(()=>alert('Copy thất bại')); };
+  }catch(e){
+    console.error(e);
+    titleEl.innerText = 'Lỗi tải script';
+    codeEl.innerText = e.message || 'Lỗi';
+    infoEl.innerText = '';
+  }
 }
 
-load();
+loadScript();
 
-// register service worker (optional but recommended)
+// register service worker (for caching)
 if('serviceWorker' in navigator){
   navigator.serviceWorker.register('sw.js').catch(()=>{/* ignore */});
 }
