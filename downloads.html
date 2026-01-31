@@ -18,7 +18,7 @@ button{margin-top:10px;padding:10px 14px;border:0;border-radius:8px;background:#
 .content{padding:10px}
 .title{font-weight:700;margin-bottom:4px}
 .actions{display:flex;gap:6px;margin-top:8px}
-.progress{height:20px;background:#1f2a44;border-radius:8px;overflow:hidden;margin-top:8px}
+.progress{height:22px;background:#1f2a44;border-radius:8px;overflow:hidden;margin-top:10px}
 .bar{height:100%;width:0%;background:#22c55e;text-align:center;font-size:12px}
 </style>
 </head>
@@ -28,12 +28,16 @@ button{margin-top:10px;padding:10px 14px;border:0;border-radius:8px;background:#
 
 <div class="box">
 <h3>Upload file mới</h3>
+
 <input id="token" placeholder="GitHub Token">
 <input id="name" placeholder="Tên file">
 <textarea id="desc" placeholder="Mô tả"></textarea>
+
 <input type="file" id="thumb" accept="image/*">
 <img id="preview" style="max-width:150px;margin-top:8px;display:none;border-radius:8px">
+
 <input type="file" id="file">
+
 <button onclick="upload()">Upload</button>
 
 <div class="progress"><div id="bar" class="bar">0%</div></div>
@@ -46,14 +50,23 @@ button{margin-top:10px;padding:10px 14px;border:0;border-radius:8px;background:#
 </div>
 
 <script>
-const REPO = "pro-coconut/Tim-script.github.io"; // sửa
+const REPO = "pro-coconut/tim-script.github.io";
 const BRANCH = "main";
 
-document.getElementById("thumb").onchange=e=>{
+let thumbFile = null;
+let mainFile = null;
+
+// FIX ANDROID: lưu file ngay khi chọn
+thumb.onchange = e=>{
+  thumbFile = e.target.files[0];
   const r=new FileReader();
   r.onload=()=>{preview.src=r.result;preview.style.display="block";}
-  r.readAsDataURL(e.target.files[0]);
-}
+  r.readAsDataURL(thumbFile);
+};
+
+file.onchange = e=>{
+  mainFile = e.target.files[0];
+};
 
 function b64(file){
   return new Promise(r=>{
@@ -63,33 +76,42 @@ function b64(file){
   });
 }
 
-function progress(p){
+function setBar(p){
   bar.style.width=p+"%";
   bar.innerText=p+"%";
 }
 
 async function upload(){
   const token=tokenEl.value.trim();
-  const name=nameEl.value;
-  const desc=descEl.value;
-  const thumb=thumbEl.files[0];
-  const file=fileEl.files[0];
-  if(!token||!name||!thumb||!file)return alert("Thiếu dữ liệu");
+  const name=nameEl.value.trim();
+  const desc=descEl.value.trim();
+
+  if(!token||!name||!thumbFile||!mainFile){
+    alert("Thiếu dữ liệu");
+    return;
+  }
+
+  setBar(10);
+  status.innerText="Upload thumbnail...";
 
   const t=Date.now();
-  const thumbPath=`thumbs/${t}_${thumb.name}`;
-  const filePath=`files/${t}_${file.name}`;
+  const thumbPath=`thumbs/${t}_${thumbFile.name}`;
+  const filePath=`files/${t}_${mainFile.name}`;
 
-  status.innerText="Upload thumbnail...";
-  await putFile(thumbPath,await b64(thumb),token);
+  await putFile(thumbPath,await b64(thumbFile),token);
 
+  setBar(50);
   status.innerText="Upload file...";
-  await putFile(filePath,await b64(file),token);
 
-  status.innerText="Cập nhật data.json...";
+  await putFile(filePath,await b64(mainFile),token);
+
+  setBar(80);
+  status.innerText="Cập nhật data...";
+
   await updateData({name,desc,thumb:thumbPath,file:filePath},token);
 
-  status.innerText="✅ Xong!";
+  setBar(100);
+  status.innerText="✅ Thành công!";
   loadList();
 }
 
@@ -113,6 +135,7 @@ async function updateData(item,token){
   const j=await res.json();
   const data=JSON.parse(atob(j.content));
   data.unshift(item);
+
   await fetch(`https://api.github.com/repos/${REPO}/contents/data.json`,{
     method:"PUT",
     headers:{Authorization:"token "+token},
@@ -145,7 +168,7 @@ async function loadList(){
 
 async function del(i){
   const token=tokenEl.value.trim();
-  if(!token)return alert("Nhập token để xóa");
+  if(!token) return alert("Nhập token để xóa");
 
   const data=await getData();
   const item=data[i];
@@ -185,7 +208,7 @@ async function deleteFile(path,token){
   });
 }
 
-const tokenEl=token,nameEl=name,descEl=desc,thumbEl=thumb,fileEl=file,bar=bar,status=status,list=list;
+const tokenEl=token,nameEl=name,descEl=desc,bar=bar,status=status,list=list;
 loadList();
 </script>
 </body>
