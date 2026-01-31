@@ -1,154 +1,232 @@
 <!DOCTYPE html>
 <html lang="vi">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>ScriptBlox Mini</title>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>ScriptBlox Mini Pro</title>
+
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700&display=swap" rel="stylesheet">
 
 <style>
+*{box-sizing:border-box;margin:0;padding:0}
 body{
-  margin:0;
-  font-family: Arial, Helvetica, sans-serif;
-  background:#0f0f0f;
-  color:white;
+  font-family:'Poppins',sans-serif;
+  background:linear-gradient(135deg,#0b1220,#0e1627);
+  color:#e6eef8;
 }
 
+/* HEADER */
 header{
-  padding:15px;
-  text-align:center;
+  position:sticky;
+  top:0;
+  z-index:1000;
+  background:rgba(15,23,42,0.9);
+  backdrop-filter:blur(10px);
+  padding:16px;
+  display:flex;
+  flex-wrap:wrap;
+  align-items:center;
+  gap:14px;
+  border-bottom:1px solid #1f2a44;
+}
+.logo{
   font-size:22px;
-  font-weight:bold;
-  background:#1a1a1a;
+  font-weight:700;
+  background:linear-gradient(90deg,#38bdf8,#60a5fa);
+  -webkit-background-clip:text;
+  color:transparent;
 }
-
-.search-box{
-  padding:15px;
-  text-align:center;
+.search-wrap{
+  flex:1;
+  display:flex;
+  gap:10px;
 }
-
-.search-box input{
-  width:80%;
-  max-width:500px;
-  padding:12px;
-  font-size:16px;
-  border-radius:8px;
-  border:none;
+.search-wrap input{
+  flex:1;
+  padding:12px 14px;
+  border-radius:12px;
+  border:1px solid #1f2a44;
+  background:#0f1a28;
+  color:white;
+  font-size:15px;
   outline:none;
+  transition:.2s;
+}
+.search-wrap input:focus{
+  border-color:#38bdf8;
+  box-shadow:0 0 10px #38bdf855;
+}
+.search-wrap button{
+  padding:12px 18px;
+  border-radius:12px;
+  border:none;
+  background:linear-gradient(90deg,#38bdf8,#0ea5e9);
+  color:#04293a;
+  font-weight:600;
+  cursor:pointer;
+  transition:.2s;
+}
+.search-wrap button:hover{
+  transform:translateY(-2px);
+  box-shadow:0 6px 16px #38bdf855;
 }
 
-.section-title{
-  font-size:20px;
-  margin:20px 15px 10px;
+/* MAIN */
+.container{
+  max-width:1200px;
+  margin:auto;
+  padding:20px 14px 60px;
 }
 
+h2{
+  margin:30px 0 14px;
+  font-weight:600;
+  color:#38bdf8;
+  border-left:4px solid #38bdf8;
+  padding-left:10px;
+}
+
+/* GRID */
 .grid{
   display:grid;
-  grid-template-columns:repeat(auto-fill,minmax(170px,1fr));
-  gap:15px;
-  padding:15px;
+  grid-template-columns:repeat(auto-fill,minmax(260px,1fr));
+  gap:18px;
 }
 
+/* CARD */
 .card{
-  background:#1b1b1b;
-  border-radius:10px;
+  background:#1e293b;
+  border-radius:16px;
   overflow:hidden;
   cursor:pointer;
-  transition:0.2s;
+  transition:.25s;
+  border:1px solid #1f2a44;
 }
-
 .card:hover{
-  transform:scale(1.03);
+  transform:translateY(-8px);
+  box-shadow:0 12px 30px #00000066;
 }
 
-.card img{
-  width:100%;
-  height:120px;
-  object-fit:cover;
-  background:#222;
-}
-
-.card .info{
-  padding:10px;
-}
-
-.card .title{
-  font-size:14px;
-  font-weight:bold;
-  height:38px;
+/* THUMB */
+.thumb{
+  height:160px;
+  background:#071826;
   overflow:hidden;
 }
+.thumb img{
+  width:100%;
+  height:100%;
+  object-fit:cover;
+  transition:.3s;
+}
+.card:hover .thumb img{
+  transform:scale(1.05);
+}
 
-.card .game{
-  font-size:12px;
-  color:#aaa;
-  margin-top:4px;
+/* CONTENT */
+.content{
+  padding:14px;
+}
+.title{
+  font-size:15px;
+  font-weight:600;
+  margin-bottom:6px;
+  min-height:40px;
+}
+.meta{
+  font-size:13px;
+  color:#94a3b8;
+}
+
+/* LOADER */
+.loader{
+  grid-column:1/-1;
+  text-align:center;
+  padding:30px;
+  color:#94a3b8;
+  font-size:14px;
+}
+
+/* MOBILE */
+@media(max-width:600px){
+  .thumb{height:130px}
+  .logo{font-size:18px}
 }
 </style>
 </head>
 
 <body>
 
-<header>ScriptBlox Mini</header>
+<header>
+  <div class="logo">ScriptBlox Mini Pro</div>
+  <div class="search-wrap">
+    <input id="q" placeholder="Tìm script (vd: blox fruit, admin)..." />
+    <button onclick="search()">Tìm</button>
+  </div>
+</header>
 
-<div class="search-box">
-  <input id="searchInput" placeholder="Tìm script..." />
+<div class="container">
+
+  <h2>🔎 Kết quả tìm kiếm</h2>
+  <div id="results" class="grid"></div>
+
+  <h2>🆕 Script mới nhất</h2>
+  <div id="latest" class="grid"></div>
+
 </div>
 
-<div class="section-title">Script mới nhất</div>
-<div id="latest" class="grid"></div>
-
-<div class="section-title">Kết quả tìm kiếm</div>
-<div id="results" class="grid"></div>
-
 <script>
-const API_BASE = "https://scriptblox.com/api/script";
+const API = "https://scriptblox.com/api/script/search";
 
-// Tạo card script
-function createCard(script){
-  const img = script.image || script.thumbnail || "https://i.imgur.com/8Km9tLL.png";
+function getThumb(s){
+  return (
+    s.image ||
+    s.thumbnail ||
+    s.game?.imageUrl ||
+    "https://i.imgur.com/8Km9tLL.png"
+  );
+}
 
+function card(s){
+  const thumb = getThumb(s);
   return `
-  <div class="card" onclick="openScript('${script.slug}')">
-    <img src="${img}">
-    <div class="info">
-      <div class="title">${script.title}</div>
-      <div class="game">${script.game?.name || "Unknown Game"}</div>
+    <div class="card" onclick="view('${s._id}')">
+      <div class="thumb">
+        <img src="${thumb}" onerror="this.src='https://i.imgur.com/8Km9tLL.png'">
+      </div>
+      <div class="content">
+        <div class="title">${s.title}</div>
+        <div class="meta">${s.game?.name || ''}</div>
+        <div class="meta">👁 ${s.views || 0} • ${s.owner?.username || ''}</div>
+      </div>
     </div>
-  </div>`;
+  `;
 }
 
-function openScript(slug){
-  window.location.href = "view.html?slug=" + slug;
+async function api(q){
+  const url = `${API}?q=${encodeURIComponent(q)}&max=12`;
+  const res = await fetch(url);
+  const j = await res.json();
+  return j.result?.scripts || [];
 }
 
-// Load script mới nhất
 async function loadLatest(){
-  const res = await fetch(`${API_BASE}?sortBy=createdAt&order=desc`);
-  const data = await res.json();
-  const scripts = data.result?.scripts || [];
-
-  document.getElementById("latest").innerHTML =
-    scripts.slice(0,20).map(createCard).join("");
+  document.getElementById('latest').innerHTML = '<div class="loader">Đang tải script mới...</div>';
+  const data = await api("script");
+  document.getElementById('latest').innerHTML = data.map(card).join('');
 }
 
-// Tìm kiếm script
-async function searchScripts(keyword){
-  if(!keyword) return;
-
-  const res = await fetch(`${API_BASE}/search?q=${encodeURIComponent(keyword)}`);
-  const data = await res.json();
-  const scripts = data.result?.scripts || [];
-
-  document.getElementById("results").innerHTML =
-    scripts.map(createCard).join("");
+async function search(){
+  const q = document.getElementById('q').value.trim();
+  if(!q) return;
+  document.getElementById('results').innerHTML = '<div class="loader">Đang tìm kiếm...</div>';
+  const data = await api(q);
+  document.getElementById('results').innerHTML = data.map(card).join('');
 }
 
-// Sự kiện tìm kiếm
-document.getElementById("searchInput").addEventListener("keydown", e=>{
-  if(e.key === "Enter"){
-    searchScripts(e.target.value.trim());
-  }
-});
+function view(id){
+  window.location.href = "view.html?id=" + id;
+}
 
 loadLatest();
 </script>
