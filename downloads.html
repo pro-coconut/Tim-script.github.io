@@ -19,12 +19,31 @@ body{
 .header{
   position:sticky;
   top:0;
+  z-index:1000;
   backdrop-filter:blur(12px);
   background:rgba(15,23,42,0.9);
-  padding:18px;
+  padding:22px 16px;
   text-align:center;
   border-bottom:1px solid #1f2a44;
 }
+
+.back-btn{
+  position:absolute;
+  left:16px;
+  top:18px;
+  padding:10px 14px;
+  border-radius:12px;
+  background:linear-gradient(90deg,#38bdf8,#0ea5e9);
+  color:#04293a;
+  font-weight:700;
+  text-decoration:none;
+  transition:.25s;
+}
+.back-btn:hover{
+  transform:translateY(-3px);
+  box-shadow:0 8px 18px #38bdf855;
+}
+
 .header h1{
   font-size:24px;
   background:linear-gradient(90deg,#38bdf8,#60a5fa);
@@ -36,7 +55,7 @@ body{
 .container{
   max-width:1200px;
   margin:auto;
-  padding:24px 16px 60px;
+  padding:28px 16px 60px;
 }
 
 /* GRID */
@@ -121,6 +140,7 @@ body{
 /* MOBILE */
 @media(max-width:600px){
   .thumb{height:140px}
+  .back-btn{padding:8px 10px;font-size:13px}
 }
 </style>
 </head>
@@ -128,6 +148,7 @@ body{
 <body>
 
 <div class="header">
+  <a href="index.html" class="back-btn">← Về trang tìm script</a>
   <h1>📦 Kho tải file của Tâm</h1>
 </div>
 
