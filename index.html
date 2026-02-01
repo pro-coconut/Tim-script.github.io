@@ -121,6 +121,7 @@ h2{
   object-fit:cover;
   display:block;
   transition:transform .35s, opacity .25s;
+  opacity:1;
 }
 .card:hover .thumb img{
   transform:scale(1.05);
@@ -160,8 +161,6 @@ h2{
   0% { background-position: -200% 0; }
   100% { background-position: 200% 0; }
 }
-
-/* skeleton blocks */
 .card.is-loading .thumb::after{
   content:'';
   display:block;
@@ -169,7 +168,6 @@ h2{
   height:100%;
   position:absolute;
   left:0;top:0;
-  border-radius:0;
   background: linear-gradient(90deg,#0f1720 0%, #121827 40%, #0f1720 100%);
   background-size:200% 100%;
   animation: shimmer 1.1s linear infinite;
@@ -177,13 +175,11 @@ h2{
 .card.is-loading .title,
 .card.is-loading .meta {
   color: transparent;
-  position:relative;
 }
 .card.is-loading .title::after,
 .card.is-loading .meta::after{
   content:'';
   display:block;
-  width:100%;
   height:14px;
   background:linear-gradient(90deg,#0f1720 0%, #121827 40%, #0f1720 100%);
   background-size:200% 100%;
@@ -258,6 +254,7 @@ const SEARCH_ENDPOINT = API_BASE + '/script/search';
 const SCRIPT_ENDPOINT = API_BASE + '/script'; // fetch details by id
 const PLACEHOLDER = 'https://i.ibb.co/8gbRfFsp/images.png';
 const MAX_PER_PAGE = 12;
+const THUMB_NORMALIZE_BASE = 'https://scriptblox.com';
 
 /* ---------- Utils ---------- */
 const qs = sel => document.querySelector(sel);
@@ -273,35 +270,64 @@ const latestEl = qs('#latest');
 const thumbCache = new Map(); // id -> url or null
 const detailCache = new Map(); // id -> full script detail
 
-/* ---------- Get thumbnail robustly ---------- */
+/* ---------- Normalize thumbnail URL ---------- */
+function normalizeThumbUrl(raw){
+  if(!raw) return null;
+  raw = String(raw).trim();
+  // if already absolute
+  if(raw.startsWith('http://') || raw.startsWith('https://')) return raw;
+  // protocol-less e.g. //scriptblox.com/...
+  if(raw.startsWith('//')) return location.protocol + raw;
+  // leading slash: /images/...
+  if(raw.startsWith('/')) return THUMB_NORMALIZE_BASE + raw;
+  // starts with images/ or images/script/...
+  if(raw.startsWith('images/') || raw.startsWith('image/') || raw.startsWith('uploads/') || raw.startsWith('scripts/')) {
+    return THUMB_NORMALIZE_BASE + '/' + raw;
+  }
+  // contains "scriptblox.com" but missing scheme
+  if(raw.includes('scriptblox.com')) {
+    return (raw.startsWith('http') ? raw : 'https://' + raw);
+  }
+  // fallback: prefix scriptblox
+  return THUMB_NORMALIZE_BASE + '/' + raw;
+}
+
+/* ---------- Get thumbnail robustly (tries many fields, then details) ---------- */
 async function getThumbUrl(scriptObj){
   if(!scriptObj) return PLACEHOLDER;
   const id = scriptObj._id || scriptObj.id || scriptObj._id_str || scriptObj.id_str || (scriptObj.slug ? 's-'+scriptObj.slug : null);
 
   if(id && thumbCache.has(id)) return thumbCache.get(id);
 
-  // try obvious fields
-  const tryFields = ['image','thumbnail','imageUrl','thumb','thumbUrl','coverImage','preview','cover','img','url'];
+  const tryFields = ['image','thumbnail','imageUrl','thumb','thumbUrl','coverImage','preview','cover','img','url','imagePath','thumbnailUrl'];
   for(const f of tryFields){
-    if(scriptObj[f]){
-      thumbCache.set(id || f, scriptObj[f]);
-      return scriptObj[f];
+    const v = scriptObj[f];
+    if(v){
+      const n = normalizeThumbUrl(v);
+      thumbCache.set(id || f, n);
+      return n;
     }
   }
 
   // nested game/owner fields
-  if(scriptObj.game && (scriptObj.game.imageUrl || scriptObj.game.thumbnail || scriptObj.game.thumb)){
-    const val = scriptObj.game.imageUrl || scriptObj.game.thumbnail || scriptObj.game.thumb;
-    if(id) thumbCache.set(id, val);
-    return val;
+  if(scriptObj.game){
+    const v = scriptObj.game.imageUrl || scriptObj.game.thumbnail || scriptObj.game.thumb || scriptObj.game.icon || scriptObj.game.image;
+    if(v){
+      const n = normalizeThumbUrl(v);
+      if(id) thumbCache.set(id,n);
+      return n;
+    }
   }
-  if(scriptObj.owner && (scriptObj.owner.avatar || scriptObj.owner.image)){
-    const val = scriptObj.owner.avatar || scriptObj.owner.image;
-    if(id) thumbCache.set(id, val);
-    return val;
+  if(scriptObj.owner){
+    const v = scriptObj.owner.avatar || scriptObj.owner.image || scriptObj.owner.avatarUrl;
+    if(v){
+      const n = normalizeThumbUrl(v);
+      if(id) thumbCache.set(id,n);
+      return n;
+    }
   }
 
-  // fetch full detail if possible
+  // not found in summary -> fetch full detail and try again
   if(id){
     try{
       let full = detailCache.get(id);
@@ -311,33 +337,33 @@ async function getThumbUrl(scriptObj){
           const j = await res.json();
           full = j.script || j.result || j.data || j;
           detailCache.set(id, full);
+        } else {
+          // if detail endpoint returns a relative object (rare), still continue
         }
       }
       if(full){
         for(const f of tryFields){
-          if(full[f]){
-            thumbCache.set(id, full[f]);
-            return full[f];
+          const v = full[f];
+          if(v){
+            const n = normalizeThumbUrl(v);
+            thumbCache.set(id,n);
+            return n;
           }
         }
-        if(full.game && (full.game.imageUrl || full.game.thumbnail || full.game.thumb)){
-          const val = full.game.imageUrl || full.game.thumbnail || full.game.thumb;
-          thumbCache.set(id, val);
-          return val;
+        // nested arrays or properties
+        if(full.game){
+          const v = full.game.imageUrl || full.game.thumbnail || full.game.thumb;
+          if(v){ const n=normalizeThumbUrl(v); thumbCache.set(id,n); return n; }
         }
-        if(full.imageUrlLarge){
-          thumbCache.set(id, full.imageUrlLarge);
-          return full.imageUrlLarge;
+        if(full.images && Array.isArray(full.images) && full.images.length){
+          const n = normalizeThumbUrl(full.images[0]);
+          thumbCache.set(id,n);
+          return n;
         }
-        if(Array.isArray(full.images) && full.images.length){
-          const val = full.images[0];
-          thumbCache.set(id, val);
-          return val;
-        }
-        if(Array.isArray(full.assets) && full.assets.length){
-          const val = full.assets[0].url || full.assets[0];
-          thumbCache.set(id, val);
-          return val;
+        if(full.assets && Array.isArray(full.assets) && full.assets.length){
+          const a = full.assets[0];
+          const v = (a && (a.url || a.path || a.src)) || a;
+          if(v){ const n=normalizeThumbUrl(v); thumbCache.set(id,n); return n; }
         }
       }
     }catch(e){
@@ -345,19 +371,18 @@ async function getThumbUrl(scriptObj){
     }
   }
 
+  // final fallback
   if(id) thumbCache.set(id, PLACEHOLDER);
   return PLACEHOLDER;
 }
 
-/* ---------- Card HTML ---------- */
+/* ---------- Card HTML (initial skeleton) ---------- */
 function createCardHTML(s){
   const id = escapeHtml(s._id || s.id || '');
   const title = escapeHtml(s.title || s.name || 'Untitled');
   const gameName = escapeHtml(s.game?.name || '-');
   const author = escapeHtml(s.owner?.username || s.owner?.name || '-');
   const views = escapeHtml(s.views || s.viewCount || 0);
-
-  // note: initial img src is placeholder; we'll replace when real URL known
   return `
     <div class="card is-loading" data-id="${id}">
       <div class="thumb"><img loading="lazy" src="${PLACEHOLDER}" alt="${title}"></div>
@@ -377,47 +402,66 @@ function attachCardClicks(container){
   });
 }
 
-/* ---------- Render list (progressive thumb load) ---------- */
+/* ---------- Render list with progressive thumb load + timeout fallback ---------- */
 async function renderScriptsList(scripts, container){
   if(!scripts || scripts.length === 0){
     container.innerHTML = '<div class="loader">Không có dữ liệu</div>';
     return;
   }
 
-  // render placeholders (skeleton via .is-loading)
+  // render skeleton cards first
   container.innerHTML = scripts.map(s => createCardHTML(s)).join('');
   attachCardClicks(container);
 
-  // For each script, fetch thumb url and update card's img; remove loading when image loaded
   const cards = Array.from(container.querySelectorAll('.card'));
+
+  // for each script, load thumb
   await Promise.all(scripts.map(async (s, idx) => {
     const card = cards[idx];
     if(!card) return;
+    const img = card.querySelector('img');
+
+    // set timeout to remove skeleton if image never loads (e.g., CORS or 404)
+    let timedOut = false;
+    const t = setTimeout(()=>{
+      timedOut = true;
+      card.classList.remove('is-loading');
+      img.src = PLACEHOLDER;
+    }, 3500); // 3.5s timeout
+
     try{
-      const url = await getThumbUrl(s);
-      const img = card.querySelector('img');
-      // set up load/error handlers to remove skeleton after attempt
-      const onDone = () => {
+      const urlRaw = await getThumbUrl(s);
+      const url = normalizeThumbUrl(urlRaw || PLACEHOLDER);
+
+      // set handlers
+      const onLoad = () => {
+        if(timedOut) return;
+        clearTimeout(t);
+        img.style.opacity = '1';
         card.classList.remove('is-loading');
-        img.removeEventListener('load', onDone);
-        img.removeEventListener('error', onErr);
+        cleanup();
       };
       const onErr = () => {
-        // fallback image then remove skeleton
+        if(timedOut) return;
+        clearTimeout(t);
         img.src = PLACEHOLDER;
-        onDone();
+        card.classList.remove('is-loading');
+        cleanup();
       };
-      img.addEventListener('load', onDone);
+      function cleanup(){
+        img.removeEventListener('load', onLoad);
+        img.removeEventListener('error', onErr);
+      }
+
+      img.addEventListener('load', onLoad);
       img.addEventListener('error', onErr);
+
       // assign src (this triggers load/error)
-      if(img.src !== url) img.src = url || PLACEHOLDER;
+      if(img.src !== url) img.src = url;
     }catch(e){
-      // ensure skeleton removed even if getThumbUrl fails
-      try{
-        const img = card.querySelector('img');
-        img.src = PLACEHOLDER;
-      }catch{}
+      clearTimeout(t);
       card.classList.remove('is-loading');
+      img.src = PLACEHOLDER;
     }
   }));
 }
@@ -452,6 +496,7 @@ async function startSearch(q){
 
 /* ---------- Actions ---------- */
 function view(id){
+  // open view page
   window.location.href = `view.html?id=${encodeURIComponent(id)}`;
 }
 
