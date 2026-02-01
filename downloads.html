@@ -88,22 +88,18 @@ function githubUrlToRaw(url){
   try{
     const u = url.trim();
     if(u.includes('raw.githubusercontent.com')){
-      // handle cases accidentally containing refs/heads
       return u.replace('/refs/heads/','/');
     }
-    // patterns: https://github.com/user/repo/blob/branch/path -> raw.githubusercontent.com/user/repo/branch/path
     const m = u.match(/^https?:\/\/github\.com\/([^\/]+)\/([^\/]+)\/(blob|tree)\/([^\/]+)\/(.+)$/i);
     if(m){
       const user = m[1], repo = m[2], branch = m[4], path = m[5];
       return `https://raw.githubusercontent.com/${user}/${repo}/${branch}/${path}`;
     }
-    // patterns: https://github.com/user/repo/raw/branch/path
     const m2 = u.match(/^https?:\/\/github\.com\/([^\/]+)\/([^\/]+)\/raw\/([^\/]+)\/(.+)$/i);
     if(m2){
       const user = m2[1], repo = m2[2], branch = m2[3], path = m2[4];
       return `https://raw.githubusercontent.com/${user}/${repo}/${branch}/${path}`;
     }
-    // if includes /refs/heads/ in raw.githubusercontent style, normalize
     if(u.includes('/refs/heads/')){
       return u.replace('/refs/heads/','/');
     }
@@ -114,54 +110,49 @@ function githubUrlToRaw(url){
 function normalizeThumbValue(v){
   if(!v) return PLACEHOLDER;
   if(isAbsoluteUrl(v)){
-    // try to normalize github links that aren't raw
     if(v.includes('github.com')) return githubUrlToRaw(v);
     return v;
   }
-  // if it's already a raw path (contains raw.githubusercontent)
-  if(v.includes('raw.githubusercontent.com')) return v.replace('/refs/heads/','/');
-  // trim leading slashes
+  if(String(v).includes('raw.githubusercontent.com')) return String(v).replace('/refs/heads/','/');
   let path = String(v).replace(/^\/+/,'');
-  // if user accidentally supplied "https:raw..." keep as is
   if(path.startsWith('https:') || path.startsWith('http:')) return path;
-  // local path -> construct raw URL
   return RAW_BASE + safeEncodePath(path);
 }
 
 function normalizeFileValue(v){
   if(!v) return '#';
   if(isAbsoluteUrl(v)) return v;
-  // if a raw.githubusercontent link to binary (rare), return it
-  if(v.includes('raw.githubusercontent.com')) return v;
-  // trim leading slashes
+  if(String(v).includes('raw.githubusercontent.com')) return v;
   const path = String(v).replace(/^\/+/,'');
-  // local file in repo -> use GitHub Pages URL so browser can download with correct headers
   return PAGES_BASE + safeEncodePath(path);
+}
+
+/* escapeHtml (đã thêm để tránh lỗi) */
+function escapeHtml(text){
+  if(text === null || text === undefined) return '';
+  return String(text)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
 }
 
 /* support many field names and simple string entries */
 function parseEntry(entry){
-  // returns { name, desc, thumbRaw, fileRaw }
   if(typeof entry === 'string'){
-    // plain string interpreted as file URL (or local path)
     const fileRaw = entry;
-    // derive a friendly name from filename
-    const name = decodeURIComponent(fileRaw.split('/').pop() || fileRaw);
+    const name = decodeURIComponent((fileRaw.split('/').pop() || fileRaw));
     return { name, desc: '', thumbRaw: '', fileRaw };
   }
   if(entry === null || typeof entry !== 'object') return null;
-  // try many keys
   const name = entry.name || entry.title || entry.label || '';
   const desc = entry.desc || entry.description || entry.long_desc || entry.info || '';
-  // file keys
   let fileRaw = entry.file || entry.file_url || entry.url || entry.download || entry.link || entry.fileUrl || entry.filepath || '';
   if(!fileRaw && Array.isArray(entry.files) && entry.files.length) fileRaw = entry.files[0];
-  // thumb keys
   let thumbRaw = entry.thumb || entry.thumbnail || entry.image || entry.thumb_url || entry.thumbnail_url || entry.imageUrl || entry.cover || '';
-  // allow nested fields like resources.image or assets[0]
   if(!thumbRaw && entry.resources && entry.resources.image) thumbRaw = entry.resources.image;
   if(!thumbRaw && Array.isArray(entry.images) && entry.images.length) thumbRaw = entry.images[0];
-  // fallback: maybe user put path in 'thumbs' key
   if(!thumbRaw && entry.thumbs && Array.isArray(entry.thumbs) && entry.thumbs.length) thumbRaw = entry.thumbs[0];
   return { name: String(name||''), desc: String(desc||''), thumbRaw: String(thumbRaw||''), fileRaw: String(fileRaw||'') };
 }
@@ -177,12 +168,10 @@ function renderItems(items){
   }
   const parts = items.map((entry, idx) => {
     const parsed = parseEntry(entry) || {};
-    // make friendly defaults
-    const name = parsed.name || parsed.fileRaw.split('/').pop() || `File ${idx+1}`;
+    const name = parsed.name || (parsed.fileRaw ? parsed.fileRaw.split('/').pop() : `File ${idx+1}`);
     const desc = parsed.desc || '';
     const thumbUrl = normalizeThumbValue(parsed.thumbRaw || parsed.thumbnail || '');
     const fileUrl = normalizeFileValue(parsed.fileRaw || parsed.file || parsed.url || parsed.download || '');
-    // return html (safe-ish)
     return `
       <div class="card is-loading" data-idx="${idx}">
         <div class="thumb"><img src="${thumbUrl}" alt="${escapeHtml(name)}" loading="lazy" onerror="this.onerror=null;this.src='${PLACEHOLDER}'"></div>
@@ -195,20 +184,13 @@ function renderItems(items){
     `;
   });
   list.innerHTML = parts.join('');
-  // remove skeleton after images settle (add small timeout to display skeleton briefly)
   const cards = Array.from(list.querySelectorAll('.card'));
   cards.forEach(card=>{
     const img = card.querySelector('img');
     let settled = false;
-    const done = ()=>{
-      if(settled) return;
-      settled = true;
-      card.classList.remove('is-loading');
-    };
-    // load/error handlers
+    const done = ()=>{ if(settled) return; settled=true; card.classList.remove('is-loading'); };
     img.addEventListener('load', ()=>{ done(); });
     img.addEventListener('error', ()=>{ done(); });
-    // safety timeout in case load neither fires
     setTimeout(()=>{ done(); }, 3500);
   });
   document.getElementById('msg').innerText = '';
@@ -222,7 +204,6 @@ async function load(){
     const res = await fetch(DATA_JSON_URL, {cache:'no-store'});
     if(!res.ok) throw new Error('Không lấy được data.json (HTTP '+res.status+')');
     const data = await res.json();
-    // allow if JSON is object with root key 'items' or 'files'
     let items = data;
     if(data && typeof data === 'object' && !Array.isArray(data)){
       if(Array.isArray(data.items)) items = data.items;
