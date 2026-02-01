@@ -3,174 +3,243 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Kho tải file</title>
-
+<title>Kho tải file của Tâm</title>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700&display=swap" rel="stylesheet">
 <style>
+:root{
+  --bg:#0b1220; --panel:#0f172a; --muted:#94a3b8; --accent:#38bdf8;
+}
+*{box-sizing:border-box}
 body{
-  margin:0;
-  font-family:Arial,Helvetica,sans-serif;
-  background:#0b1220;
-  color:white;
+  margin:0;font-family:'Poppins',sans-serif;background:var(--bg);color:#e6eef8;
 }
 
-/* ===== HEADER ===== */
+/* header */
 .header{
-  position:sticky;
-  top:0;
-  z-index:1000;
-  backdrop-filter:blur(12px);
-  background:rgba(15,23,42,0.9);
-  padding:18px 16px;
-  border-bottom:1px solid #1f2a44;
-
-  display:flex;
-  align-items:center;
-  justify-content:space-between;
-  gap:12px;
+  position:sticky;top:0;z-index:1000;padding:18px 16px;background:rgba(15,23,42,0.9);
+  display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #1f2a44;
 }
-
 .header h1{
-  flex:1;
-  text-align:center;
-  font-size:22px;
-  background:linear-gradient(90deg,#38bdf8,#60a5fa);
-  -webkit-background-clip:text;
-  color:transparent;
+  margin:0;font-size:20px;font-weight:700;
+  background:linear-gradient(90deg,var(--accent),#60a5fa);-webkit-background-clip:text;color:transparent;text-align:center;flex:1;
 }
+.back-btn{padding:10px 14px;border-radius:10px;background:linear-gradient(90deg,var(--accent),#0ea5e9);color:#04293a;font-weight:700;text-decoration:none}
+.container{max-width:1100px;margin:26px auto;padding:12px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:18px}
+.card{background:var(--panel);border-radius:14px;overflow:hidden;border:1px solid #172033;transition:transform .22s,box-shadow .22s}
+.card:hover{transform:translateY(-6px);box-shadow:0 12px 30px rgba(0,0,0,.5)}
+.thumb{height:150px;background:#071826;overflow:hidden;position:relative}
+.thumb img{width:100%;height:100%;object-fit:cover;display:block;transition:transform .3s,opacity .25s}
+.card:hover .thumb img{transform:scale(1.04)}
+.content{padding:14px}
+.title{font-size:16px;font-weight:700;margin-bottom:6px;min-height:44px}
+.desc{font-size:13px;color:var(--muted);min-height:36px}
+.download-btn{display:inline-block;width:100%;padding:12px;border-radius:10px;border:0;background:linear-gradient(90deg,#22c55e,#16a34a);color:white;font-weight:800;text-align:center;margin-top:12px;text-decoration:none}
+.empty{grid-column:1/-1;text-align:center;color:var(--muted);padding:40px}
+.small-muted{font-size:13px;color:var(--muted);margin-top:6px;text-align:center}
 
-.back-btn{
-  padding:10px 14px;
-  border-radius:12px;
-  background:linear-gradient(90deg,#38bdf8,#0ea5e9);
-  color:#04293a;
-  font-weight:700;
-  text-decoration:none;
-  transition:.25s;
-  white-space:nowrap;
+/* skeleton */
+.card.is-loading .thumb::after{
+  content:'';position:absolute;left:0;top:0;width:100%;height:100%;
+  background:linear-gradient(90deg,#0f1720 0%, #121827 40%, #0f1720 100%);background-size:200% 100%;animation:shimmer 1.1s linear infinite;
 }
+.card.is-loading .title, .card.is-loading .desc { color: transparent; }
+.card.is-loading .title::after, .card.is-loading .desc::after {
+  content:'';display:block;height:14px;border-radius:6px;background:linear-gradient(90deg,#0f1720 0%, #121827 40%, #0f1720 100%);background-size:200% 100%;animation:shimmer 1.1s linear infinite;margin-top:6px;
+}
+.card.is-loading .title::after{width:80%;height:18px}
+.card.is-loading .desc::after{width:60%;height:12px;margin-top:10px}
+@keyframes shimmer{0%{background-position:-200% 0}100%{background-position:200% 0}}
 
-.back-btn:hover{
-  transform:translateY(-3px);
-  box-shadow:0 8px 18px #38bdf855;
-}
-
-/* ===== GRID ===== */
-.container{
-  max-width:1100px;
-  margin:30px auto;
-  padding:16px;
-}
-
-.grid{
-  display:grid;
-  grid-template-columns:repeat(auto-fill,minmax(260px,1fr));
-  gap:18px;
-}
-
-.card{
-  background:#1e293b;
-  border-radius:14px;
-  overflow:hidden;
-  transition:.3s;
-  box-shadow:0 10px 20px rgba(0,0,0,.4);
-}
-
-.card:hover{
-  transform:translateY(-6px);
-}
-
-.thumb{
-  height:150px;
-  background:#071826;
-}
-
-.thumb img{
-  width:100%;
-  height:100%;
-  object-fit:cover;
-}
-
-.content{
-  padding:14px;
-}
-
-.title{
-  font-size:18px;
-  font-weight:700;
-  margin-bottom:6px;
-}
-
-.desc{
-  font-size:14px;
-  opacity:.8;
-  min-height:40px;
-}
-
-.download-btn{
-  margin-top:12px;
-  width:100%;
-  padding:10px;
-  border-radius:10px;
-  border:0;
-  font-weight:700;
-  cursor:pointer;
-  background:linear-gradient(90deg,#22c55e,#16a34a);
-  color:white;
-  transition:.25s;
-}
-
-.download-btn:hover{
-  transform:translateY(-3px);
-  box-shadow:0 8px 18px #22c55e66;
-}
+@media(max-width:600px){ .thumb{height:130px} .header h1{font-size:18px} .back-btn{padding:8px 10px} }
 </style>
 </head>
-
 <body>
 
 <div class="header">
-  <a href="index.html" class="back-btn">← Về trang tìm script</a>
+  <a class="back-btn" href="index.html">← Về trang tìm script</a>
   <h1>📦 Kho tải file của Tâm</h1>
-  <div style="width:140px"></div>
+  <div style="width:120px"></div>
 </div>
 
 <div class="container">
   <div id="list" class="grid"></div>
+  <div id="msg" class="small-muted"></div>
 </div>
 
 <script>
+/* ---------- CONFIG: set your repo/branch here ---------- */
 const REPO = "pro-coconut/Tim-script.github.io";
 const BRANCH = "main";
 
-async function loadFiles(){
-  try{
-    const res = await fetch(`https://raw.githubusercontent.com/${REPO}/${BRANCH}/data.json`);
-    const data = await res.json();
+/* derived bases */
+const RAW_BASE = `https://raw.githubusercontent.com/${REPO}/${BRANCH}/`;
+const PAGES_BASE = `https://${REPO.split('/')[0]}.github.io/${REPO.split('/')[1]}/`;
+const DATA_JSON_URL = RAW_BASE + 'data.json';
+const PLACEHOLDER = 'https://via.placeholder.com/600x320?text=No+Image';
 
-    const html = data.map(d=>`
-      <div class="card">
-        <div class="thumb">
-          <img src="${d.thumb}" onerror="this.src='https://via.placeholder.com/300x150?text=No+Image'">
-        </div>
+/* ---------- Helpers ---------- */
+function isAbsoluteUrl(u){ return typeof u === 'string' && /^https?:\/\//i.test(u); }
+function safeEncodePath(p){ return p.split('/').map(encodeURIComponent).join('/'); }
+
+/* convert various github urls to raw */
+function githubUrlToRaw(url){
+  if(!url || typeof url !== 'string') return url;
+  try{
+    const u = url.trim();
+    if(u.includes('raw.githubusercontent.com')){
+      // handle cases accidentally containing refs/heads
+      return u.replace('/refs/heads/','/');
+    }
+    // patterns: https://github.com/user/repo/blob/branch/path -> raw.githubusercontent.com/user/repo/branch/path
+    const m = u.match(/^https?:\/\/github\.com\/([^\/]+)\/([^\/]+)\/(blob|tree)\/([^\/]+)\/(.+)$/i);
+    if(m){
+      const user = m[1], repo = m[2], branch = m[4], path = m[5];
+      return `https://raw.githubusercontent.com/${user}/${repo}/${branch}/${path}`;
+    }
+    // patterns: https://github.com/user/repo/raw/branch/path
+    const m2 = u.match(/^https?:\/\/github\.com\/([^\/]+)\/([^\/]+)\/raw\/([^\/]+)\/(.+)$/i);
+    if(m2){
+      const user = m2[1], repo = m2[2], branch = m2[3], path = m2[4];
+      return `https://raw.githubusercontent.com/${user}/${repo}/${branch}/${path}`;
+    }
+    // if includes /refs/heads/ in raw.githubusercontent style, normalize
+    if(u.includes('/refs/heads/')){
+      return u.replace('/refs/heads/','/');
+    }
+  }catch(e){}
+  return url;
+}
+
+function normalizeThumbValue(v){
+  if(!v) return PLACEHOLDER;
+  if(isAbsoluteUrl(v)){
+    // try to normalize github links that aren't raw
+    if(v.includes('github.com')) return githubUrlToRaw(v);
+    return v;
+  }
+  // if it's already a raw path (contains raw.githubusercontent)
+  if(v.includes('raw.githubusercontent.com')) return v.replace('/refs/heads/','/');
+  // trim leading slashes
+  let path = String(v).replace(/^\/+/,'');
+  // if user accidentally supplied "https:raw..." keep as is
+  if(path.startsWith('https:') || path.startsWith('http:')) return path;
+  // local path -> construct raw URL
+  return RAW_BASE + safeEncodePath(path);
+}
+
+function normalizeFileValue(v){
+  if(!v) return '#';
+  if(isAbsoluteUrl(v)) return v;
+  // if a raw.githubusercontent link to binary (rare), return it
+  if(v.includes('raw.githubusercontent.com')) return v;
+  // trim leading slashes
+  const path = String(v).replace(/^\/+/,'');
+  // local file in repo -> use GitHub Pages URL so browser can download with correct headers
+  return PAGES_BASE + safeEncodePath(path);
+}
+
+/* support many field names and simple string entries */
+function parseEntry(entry){
+  // returns { name, desc, thumbRaw, fileRaw }
+  if(typeof entry === 'string'){
+    // plain string interpreted as file URL (or local path)
+    const fileRaw = entry;
+    // derive a friendly name from filename
+    const name = decodeURIComponent(fileRaw.split('/').pop() || fileRaw);
+    return { name, desc: '', thumbRaw: '', fileRaw };
+  }
+  if(entry === null || typeof entry !== 'object') return null;
+  // try many keys
+  const name = entry.name || entry.title || entry.label || '';
+  const desc = entry.desc || entry.description || entry.long_desc || entry.info || '';
+  // file keys
+  let fileRaw = entry.file || entry.file_url || entry.url || entry.download || entry.link || entry.fileUrl || entry.filepath || '';
+  if(!fileRaw && Array.isArray(entry.files) && entry.files.length) fileRaw = entry.files[0];
+  // thumb keys
+  let thumbRaw = entry.thumb || entry.thumbnail || entry.image || entry.thumb_url || entry.thumbnail_url || entry.imageUrl || entry.cover || '';
+  // allow nested fields like resources.image or assets[0]
+  if(!thumbRaw && entry.resources && entry.resources.image) thumbRaw = entry.resources.image;
+  if(!thumbRaw && Array.isArray(entry.images) && entry.images.length) thumbRaw = entry.images[0];
+  // fallback: maybe user put path in 'thumbs' key
+  if(!thumbRaw && entry.thumbs && Array.isArray(entry.thumbs) && entry.thumbs.length) thumbRaw = entry.thumbs[0];
+  return { name: String(name||''), desc: String(desc||''), thumbRaw: String(thumbRaw||''), fileRaw: String(fileRaw||'') };
+}
+
+/* ---------- Render ---------- */
+function renderItems(items){
+  const list = document.getElementById('list');
+  const msg = document.getElementById('msg');
+  if(!Array.isArray(items) || items.length === 0){
+    list.innerHTML = '<div class="empty">Danh sách trống — thêm mục vào data.json</div>';
+    msg.innerText = '';
+    return;
+  }
+  const parts = items.map((entry, idx) => {
+    const parsed = parseEntry(entry) || {};
+    // make friendly defaults
+    const name = parsed.name || parsed.fileRaw.split('/').pop() || `File ${idx+1}`;
+    const desc = parsed.desc || '';
+    const thumbUrl = normalizeThumbValue(parsed.thumbRaw || parsed.thumbnail || '');
+    const fileUrl = normalizeFileValue(parsed.fileRaw || parsed.file || parsed.url || parsed.download || '');
+    // return html (safe-ish)
+    return `
+      <div class="card is-loading" data-idx="${idx}">
+        <div class="thumb"><img src="${thumbUrl}" alt="${escapeHtml(name)}" loading="lazy" onerror="this.onerror=null;this.src='${PLACEHOLDER}'"></div>
         <div class="content">
-          <div class="title">${d.name}</div>
-          <div class="desc">${d.desc}</div>
-          <a href="${d.file}" download>
-            <button class="download-btn">Tải file</button>
-          </a>
+          <div class="title">${escapeHtml(name)}</div>
+          <div class="desc">${escapeHtml(desc)}</div>
+          <a class="download-btn" href="${fileUrl}" target="_blank" rel="noopener">⬇ Tải file</a>
         </div>
       </div>
-    `).join("");
+    `;
+  });
+  list.innerHTML = parts.join('');
+  // remove skeleton after images settle (add small timeout to display skeleton briefly)
+  const cards = Array.from(list.querySelectorAll('.card'));
+  cards.forEach(card=>{
+    const img = card.querySelector('img');
+    let settled = false;
+    const done = ()=>{
+      if(settled) return;
+      settled = true;
+      card.classList.remove('is-loading');
+    };
+    // load/error handlers
+    img.addEventListener('load', ()=>{ done(); });
+    img.addEventListener('error', ()=>{ done(); });
+    // safety timeout in case load neither fires
+    setTimeout(()=>{ done(); }, 3500);
+  });
+  document.getElementById('msg').innerText = '';
+}
 
-    document.getElementById("list").innerHTML = html;
-
-  }catch(e){
-    document.getElementById("list").innerHTML =
-      "<p>Lỗi tải dữ liệu. Kiểm tra data.json</p>";
+/* ---------- Entry point: load data.json ---------- */
+async function load(){
+  const msg = document.getElementById('msg');
+  try{
+    msg.innerText = 'Đang tải data.json...';
+    const res = await fetch(DATA_JSON_URL, {cache:'no-store'});
+    if(!res.ok) throw new Error('Không lấy được data.json (HTTP '+res.status+')');
+    const data = await res.json();
+    // allow if JSON is object with root key 'items' or 'files'
+    let items = data;
+    if(data && typeof data === 'object' && !Array.isArray(data)){
+      if(Array.isArray(data.items)) items = data.items;
+      else if(Array.isArray(data.files)) items = data.files;
+      else if(Array.isArray(data.data)) items = data.data;
+      else items = [data];
+    }
+    renderItems(items);
+  }catch(err){
+    document.getElementById('list').innerHTML = '<div class="empty">Lỗi tải dữ liệu. Kiểm tra data.json</div>';
+    msg.innerText = 'Lỗi: ' + (err && err.message ? err.message : String(err));
+    console.error(err);
   }
 }
 
-loadFiles();
+/* start */
+load();
 </script>
 
 </body>
