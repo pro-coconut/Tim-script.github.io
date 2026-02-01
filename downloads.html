@@ -20,7 +20,6 @@ button{margin-top:10px;padding:10px 14px;border:0;border-radius:8px;background:#
 .actions{display:flex;gap:6px;margin-top:8px}
 .progress{height:20px;background:#1f2a44;border-radius:8px;overflow:hidden;margin-top:8px}
 .bar{height:100%;width:0%;background:#22c55e;text-align:center;font-size:12px}
-#status{margin-top:8px;color:#facc15;font-size:13px;white-space:pre-wrap}
 </style>
 </head>
 
@@ -28,14 +27,11 @@ button{margin-top:10px;padding:10px 14px;border:0;border-radius:8px;background:#
 <div class="container">
 
 <div class="box">
-<h3>Upload file mới</h3>
-<input id="token" placeholder="GitHub Token">
+<h3>Upload file mới (siêu ổn định)</h3>
+<input id="token" placeholder="GitHub Token (repo scope)">
 <input id="name" placeholder="Tên file">
 <textarea id="desc" placeholder="Mô tả"></textarea>
-
 <input type="file" id="thumb" accept="image/*">
-<img id="preview" style="max-width:150px;margin-top:8px;display:none;border-radius:8px">
-
 <input type="file" id="file">
 <button onclick="upload()">Upload</button>
 
@@ -43,160 +39,134 @@ button{margin-top:10px;padding:10px 14px;border:0;border-radius:8px;background:#
 <div id="status"></div>
 </div>
 
-<h3>Danh sách file đã upload</h3>
+<h3>Danh sách file</h3>
 <div id="list" class="grid"></div>
 
 </div>
 
 <script>
 const REPO = "pro-coconut/Tim-script.github.io";
-const BRANCH = "main";
+const RELEASE_TAG = "files";
 
-const tokenEl=token,nameEl=name,descEl=desc,thumbEl=thumb,fileEl=file,barEl=bar,statusEl=status,listEl=list;
+const tokenEl = document.getElementById("token");
+const nameEl = document.getElementById("name");
+const descEl = document.getElementById("desc");
+const thumbEl = document.getElementById("thumb");
+const fileEl = document.getElementById("file");
+const bar = document.getElementById("bar");
+const statusEl = document.getElementById("status");
+const listEl = document.getElementById("list");
 
-thumbEl.onchange=e=>{
-  const r=new FileReader();
-  r.onload=()=>{preview.src=r.result;preview.style.display="block";}
-  r.readAsDataURL(e.target.files[0]);
+function setProgress(p){
+  bar.style.width = p + "%";
+  bar.innerText = p + "%";
 }
 
-function setStatus(t){statusEl.innerText=t}
-function progress(p){barEl.style.width=p+"%";barEl.innerText=p+"%"}
+async function getReleaseId(token){
+  const r = await fetch(`https://api.github.com/repos/${REPO}/releases/tags/${RELEASE_TAG}`,{
+    headers:{Authorization:"token "+token}
+  });
+  const j = await r.json();
+  return j.id;
+}
 
-function b64(file){
-  return new Promise(r=>{
-    const fr=new FileReader();
-    fr.onload=()=>r(fr.result.split(',')[1]);
-    fr.readAsDataURL(file);
+function uploadAsset(url, file, token){
+  return new Promise((resolve,reject)=>{
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", url, true);
+    xhr.setRequestHeader("Authorization","token "+token);
+    xhr.setRequestHeader("Content-Type","application/octet-stream");
+
+    xhr.upload.onprogress = e=>{
+      if(e.lengthComputable){
+        setProgress(Math.floor((e.loaded/e.total)*100));
+      }
+    };
+
+    xhr.onload = ()=> resolve(JSON.parse(xhr.responseText));
+    xhr.onerror = reject;
+
+    xhr.send(file);
   });
 }
 
-async function ghFetch(url,options){
-  const res = await fetch(url,{
-    ...options,
-    headers:{
-      ...(options.headers||{}),
-      Authorization:"Bearer "+tokenEl.value.trim(),
-      Accept:"application/vnd.github+json"
-    }
-  });
-  const text = await res.text();
-  if(!res.ok){
-    throw new Error(text);
+async function upload(){
+  try{
+    const token = tokenEl.value.trim();
+    const name = nameEl.value.trim();
+    const desc = descEl.value.trim();
+    const thumb = thumbEl.files[0];
+    const file = fileEl.files[0];
+
+    if(!token||!name||!thumb||!file) return alert("Thiếu dữ liệu");
+
+    statusEl.innerText="Lấy release...";
+    const releaseId = await getReleaseId(token);
+
+    statusEl.innerText="Upload thumbnail...";
+    setProgress(0);
+    const thumbRes = await uploadAsset(
+      `https://uploads.github.com/repos/${REPO}/releases/${releaseId}/assets?name=${Date.now()}_${thumb.name}`,
+      thumb, token
+    );
+
+    statusEl.innerText="Upload file chính...";
+    setProgress(0);
+    const fileRes = await uploadAsset(
+      `https://uploads.github.com/repos/${REPO}/releases/${releaseId}/assets?name=${Date.now()}_${file.name}`,
+      file, token
+    );
+
+    statusEl.innerText="Cập nhật data.json...";
+    await updateData({
+      name,desc,
+      thumb:thumbRes.browser_download_url,
+      file:fileRes.browser_download_url
+    }, token);
+
+    statusEl.innerText="✅ Hoàn tất!";
+    loadList();
+  }catch(e){
+    statusEl.innerText="❌ "+e;
   }
-  return text ? JSON.parse(text) : {};
-}
-
-async function putFile(path,content){
-  await ghFetch(`https://api.github.com/repos/${REPO}/contents/${path}`,{
-    method:"PUT",
-    body:JSON.stringify({message:"upload "+path,content})
-  });
 }
 
 async function getData(){
-  const res=await fetch(`https://raw.githubusercontent.com/${REPO}/${BRANCH}/data.json`);
-  return await res.json();
+  const r = await fetch(`https://raw.githubusercontent.com/${REPO}/main/data.json`);
+  return await r.json();
 }
 
-async function updateData(item){
-  const j = await ghFetch(`https://api.github.com/repos/${REPO}/contents/data.json`,{});
-  const data = JSON.parse(atob(j.content));
+async function updateData(item,token){
+  const res=await fetch(`https://api.github.com/repos/${REPO}/contents/data.json`,{
+    headers:{Authorization:"token "+token}
+  });
+  const j=await res.json();
+  const data=JSON.parse(atob(j.content));
   data.unshift(item);
 
-  await ghFetch(`https://api.github.com/repos/${REPO}/contents/data.json`,{
+  await fetch(`https://api.github.com/repos/${REPO}/contents/data.json`,{
     method:"PUT",
+    headers:{Authorization:"token "+token},
     body:JSON.stringify({
-      message:"update data",
+      message:"update",
       content:btoa(JSON.stringify(data,null,2)),
       sha:j.sha
     })
   });
 }
 
-async function upload(){
-  try{
-    progress(5);
-    setStatus("Đang kiểm tra dữ liệu...");
-
-    if(!tokenEl.value||!nameEl.value||!thumbEl.files[0]||!fileEl.files[0]){
-      throw new Error("Thiếu dữ liệu nhập vào");
-    }
-
-    const t=Date.now();
-    const thumbPath=`thumbs/${t}_${thumbEl.files[0].name}`;
-    const filePath=`files/${t}_${fileEl.files[0].name}`;
-
-    progress(15);
-    setStatus("Upload thumbnail...");
-    await putFile(thumbPath,await b64(thumbEl.files[0]));
-
-    progress(45);
-    setStatus("Upload file...");
-    await putFile(filePath,await b64(fileEl.files[0]));
-
-    progress(75);
-    setStatus("Cập nhật data.json...");
-    await updateData({name:nameEl.value,desc:descEl.value,thumb:thumbPath,file:filePath});
-
-    progress(100);
-    setStatus("✅ Upload thành công!");
-    loadList();
-  }
-  catch(e){
-    setStatus("❌ LỖI:\n"+e.message);
-  }
-}
-
-async function deleteFile(path){
-  const j = await ghFetch(`https://api.github.com/repos/${REPO}/contents/${path}`,{});
-  await ghFetch(`https://api.github.com/repos/${REPO}/contents/${path}`,{
-    method:"DELETE",
-    body:JSON.stringify({message:"delete "+path,sha:j.sha})
-  });
-}
-
-async function del(i){
-  try{
-    setStatus("Đang xóa...");
-    const data=await getData();
-    const item=data[i];
-
-    await deleteFile(item.thumb);
-    await deleteFile(item.file);
-
-    data.splice(i,1);
-
-    const j = await ghFetch(`https://api.github.com/repos/${REPO}/contents/data.json`,{});
-    await ghFetch(`https://api.github.com/repos/${REPO}/contents/data.json`,{
-      method:"PUT",
-      body:JSON.stringify({
-        message:"delete item",
-        content:btoa(JSON.stringify(data,null,2)),
-        sha:j.sha
-      })
-    });
-
-    setStatus("✅ Đã xóa");
-    loadList();
-  }catch(e){
-    setStatus("❌ Lỗi xóa:\n"+e.message);
-  }
-}
-
 async function loadList(){
   const data=await getData();
-  listEl.innerHTML=data.map((d,i)=>`
+  listEl.innerHTML=data.map(d=>`
     <div class="card">
       <div class="thumb">
-        <img src="https://raw.githubusercontent.com/${REPO}/${BRANCH}/${d.thumb}">
+        <img src="${d.thumb}">
       </div>
       <div class="content">
         <div class="title">${d.name}</div>
         <div>${d.desc}</div>
         <div class="actions">
-          <a href="https://raw.githubusercontent.com/${REPO}/${BRANCH}/${d.file}" download><button>Tải</button></a>
-          <button onclick="del(${i})">Xóa</button>
+          <a href="${d.file}"><button>Tải</button></a>
         </div>
       </div>
     </div>
