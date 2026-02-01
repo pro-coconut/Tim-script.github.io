@@ -3,10 +3,10 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Quản lý file tải — Releases upload</title>
+<title>Quản lý file tải — GitHub Releases</title>
 <style>
   :root{--bg:#0b1220;--panel:#0f172a;--muted:#94a3b8;--accent:#38bdf8}
-  body{margin:0;font-family:Arial,Helvetica,sans-serif;background:var(--bg);color:#e6eef8}
+  body{margin:0;font-family:Inter,Arial,Helvetica;background:var(--bg);color:#e6eef8}
   .wrap{max-width:980px;margin:28px auto;padding:18px}
   .card{background:var(--panel);padding:14px;border-radius:12px;margin-bottom:16px;border:1px solid #172033}
   input,textarea{width:100%;padding:10px;border-radius:8px;border:1px solid #172033;background:#071826;color:inherit;margin-top:8px}
@@ -31,8 +31,8 @@
 <body>
 <div class="wrap">
   <div class="card">
-    <h2>Upload file mới (qua GitHub Releases)</h2>
-    <div style="color:var(--muted);font-size:13px">Token: dùng Personal Access Token (classic) có scope <b>repo</b>.</div>
+    <h2>Upload file mới (GitHub Releases)</h2>
+    <div style="color:var(--muted);font-size:13px">Token: Personal Access Token (classic) có scope <b>repo</b>. Tag release: <b>files</b>.</div>
 
     <input id="token" placeholder="GitHub Token (ghp_...)" />
     <input id="title" placeholder="Tên file hiển thị (ví dụ: Sketchware Pro)" />
@@ -41,10 +41,10 @@
     <label style="margin-top:8px;display:block;color:var(--muted)">Thumbnail (ảnh):</label>
     <input id="thumb" type="file" accept="image/*" />
 
-    <label style="margin-top:8px;display:block;color:var(--muted)">File chính (apk/zip/rar/...):</label>
+    <label style="margin-top:8px;display:block;color:var(--muted)">File chính (apk/zip/...):</label>
     <input id="file" type="file" />
 
-    <button onclick="startUpload()">Upload</button>
+    <button id="btnUpload">Upload</button>
 
     <div class="progress"><div id="bar" class="bar">0%</div></div>
     <div id="status"></div>
@@ -55,9 +55,9 @@
 </div>
 
 <script>
-/* ====== CẤU HÌNH ====== */
-const REPO = "pro-coconut/tim-script.github.io"; // <--- sửa nếu cần
-const RELEASE_TAG = "files"; // bạn đã tạo tag này
+/* ====== Cấu hình repo / release tag ====== */
+const REPO = "pro-coconut/Tim-script.github.io"; // repo bạn đã cho
+const RELEASE_TAG = "files"; // tag release bạn đã tạo
 
 /* ====== DOM ====== */
 const tokenEl = document.getElementById('token');
@@ -68,43 +68,52 @@ const fileEl = document.getElementById('file');
 const barEl = document.getElementById('bar');
 const statusEl = document.getElementById('status');
 const listEl = document.getElementById('list');
+const btnUpload = document.getElementById('btnUpload');
 
 function setBar(p){ barEl.style.width = p + '%'; barEl.innerText = p + '%'; }
 function setStatus(txt){ statusEl.innerText = txt; }
 
-/* ====== Helper GitHub fetch with details & Accept header ====== */
-async function ghFetch(url, opts = {}){
-  const token = tokenEl.value.trim();
-  if(!token) throw new Error("Cần token GitHub (ghp_...) để thao tác");
+/* ====== Helper: safe base64 for JSON (unicode-safe) ====== */
+function toBase64String(str){
+  return btoa(unescape(encodeURIComponent(str)));
+}
+function fromBase64String(b64){
+  return decodeURIComponent(escape(atob(b64)));
+}
+
+/* ====== Helper fetch to GitHub with token + accept header, returns parsed JSON or throws with message ====== */
+async function ghFetchJson(url, opts = {}){
+  const token = tokenEl.value && tokenEl.value.trim();
+  if(!token) throw new Error("Cần GitHub token (ghp_...)");
   const headers = Object.assign({}, opts.headers || {}, {
     Authorization: "token " + token,
     Accept: "application/vnd.github+json"
   });
   const res = await fetch(url, Object.assign({}, opts, { headers }));
   const text = await res.text();
-  let data;
-  try{ data = text ? JSON.parse(text) : null; } catch(e){ data = text; }
+  let data = null;
+  try { if(text) data = JSON.parse(text); } catch(e){ data = text; }
   if(!res.ok){
-    const msg = (data && data.message) ? data.message : (typeof data === 'string' ? data : JSON.stringify(data));
-    const code = res.status;
-    throw new Error(`GitHub API lỗi ${code}: ${msg}`);
+    const msg = (data && data.message) ? data.message : text || res.statusText;
+    throw new Error(`GitHub API lỗi ${res.status}: ${msg}`);
   }
   return data;
 }
 
-/* ====== Lấy release id từ tag (nếu ko có, throw) ====== */
+/* ====== Lấy release id từ tag ====== */
 async function getReleaseId(){
   setStatus("Lấy release id cho tag: " + RELEASE_TAG + " ...");
   const url = `https://api.github.com/repos/${REPO}/releases/tags/${RELEASE_TAG}`;
-  const j = await ghFetch(url, { method: 'GET' });
-  if(!j || !j.id) throw new Error("Không tìm thấy release. Hãy tạo release với Tag = " + RELEASE_TAG);
+  const j = await ghFetchJson(url, { method: 'GET' });
+  if(!j || !j.id) throw new Error("Không tìm thấy release. Hãy tạo release có Tag = " + RELEASE_TAG);
   return j.id;
 }
 
-/* ====== Upload asset nhị phân lên uploads.github.com bằng XHR (progress) ====== */
+/* ====== Upload binary asset sang uploads.github.com sử dụng XHR để có progress ====== */
 function uploadAssetToRelease(releaseId, file, progressCb){
-  return new Promise((resolve, reject) => {
-    const token = tokenEl.value.trim();
+  return new Promise((resolve,reject)=>{
+    const token = tokenEl.value && tokenEl.value.trim();
+    if(!token) return reject(new Error("Cần token để upload asset"));
     const base = `https://uploads.github.com/repos/${REPO}/releases/${releaseId}/assets`;
     const url = base + "?name=" + encodeURIComponent(file.name);
     const xhr = new XMLHttpRequest();
@@ -122,172 +131,191 @@ function uploadAssetToRelease(releaseId, file, progressCb){
 
     xhr.onload = () => {
       if(xhr.status >= 200 && xhr.status < 300){
-        try{ const json = JSON.parse(xhr.responseText); resolve(json); }
-        catch(e){ reject(new Error("Upload trả về JSON không hợp lệ")); }
-      }else{
+        try{
+          const json = JSON.parse(xhr.responseText);
+          resolve(json);
+        }catch(err){
+          reject(new Error("Upload trả về JSON không hợp lệ"));
+        }
+      } else {
         let msg = xhr.responseText || `HTTP ${xhr.status}`;
         try{ msg = JSON.parse(xhr.responseText).message || msg; }catch(e){}
         reject(new Error("Upload asset lỗi: " + msg + " (status " + xhr.status + ")"));
       }
     };
-    xhr.onerror = () => reject(new Error("Lỗi kết nối khi upload asset"));
+    xhr.onerror = () => reject(new Error("Lỗi kết nối khi upload asset (XHR error)"));
     xhr.send(file);
   });
 }
 
-/* ====== Lấy data.json (raw) để hiển thị danh sách ====== */
+/* ====== Lấy hoặc tạo data.json, và lưu item mới ====== */
+async function saveToDataJson(item){
+  // GET contents (to obtain sha) using contents API
+  const url = `https://api.github.com/repos/${REPO}/contents/data.json`;
+  try{
+    const j = await ghFetchJson(url, { method: 'GET' });
+    const old = j.content ? JSON.parse(fromBase64String(j.content)) : [];
+    old.unshift(item);
+    const body = {
+      message: `Add file ${item.name}`,
+      content: toBase64String(JSON.stringify(old, null, 2)),
+      sha: j.sha
+    };
+    await ghFetchJson(url, { method: 'PUT', body: JSON.stringify(body) });
+  }catch(err){
+    // nếu GET bị 404 (không tồn tại), tạo file mới
+    if(String(err.message).includes("404")) {
+      const body = {
+        message: `Create data.json and add ${item.name}`,
+        content: toBase64String(JSON.stringify([item], null, 2))
+      };
+      await ghFetchJson(url, { method: 'PUT', body: JSON.stringify(body) });
+    } else {
+      throw err;
+    }
+  }
+}
+
+/* ====== Xóa asset theo asset id ====== */
+async function deleteAssetById(assetId){
+  const token = tokenEl.value && tokenEl.value.trim();
+  if(!token) throw new Error("Cần token để xóa asset");
+  const url = `https://api.github.com/repos/${REPO}/releases/assets/${assetId}`;
+  const res = await fetch(url, { method: 'DELETE', headers: { Authorization: "token " + token, Accept: "application/vnd.github+json" } });
+  if(!res.ok){
+    const t = await res.text();
+    throw new Error("Xóa asset thất bại: " + res.status + " " + t);
+  }
+  return true;
+}
+
+/* ====== Xóa mục: xóa asset file + thumb rồi cập nhật data.json ====== */
+async function deleteItem(index){
+  try{
+    setStatus("Chuẩn bị xóa...");
+    setBar(5);
+
+    // lấy data.json contents (to get sha)
+    const url = `https://api.github.com/repos/${REPO}/contents/data.json`;
+    const j = await ghFetchJson(url, { method: 'GET' });
+    const arr = j.content ? JSON.parse(fromBase64String(j.content)) : [];
+    if(!arr[index]) throw new Error("Mục không tồn tại");
+    const item = arr[index];
+
+    if(item.file_asset_id){
+      setStatus("Xóa asset file id: " + item.file_asset_id);
+      await deleteAssetById(item.file_asset_id);
+      setBar(35);
+    }
+    if(item.thumb_asset_id){
+      setStatus("Xóa asset thumb id: " + item.thumb_asset_id);
+      await deleteAssetById(item.thumb_asset_id);
+      setBar(65);
+    }
+
+    arr.splice(index, 1);
+    const putBody = {
+      message: "Remove file from data.json",
+      content: toBase64String(JSON.stringify(arr, null, 2)),
+      sha: j.sha
+    };
+    await ghFetchJson(url, { method: 'PUT', body: JSON.stringify(putBody) });
+    setBar(100);
+    setStatus("Đã xóa thành công");
+    await loadList();
+  }catch(err){
+    setStatus("Lỗi xóa: " + (err && err.message ? err.message : String(err)));
+  }
+}
+
+/* ====== Load danh sách từ raw data.json (dùng raw GitHub để hiển thị nhanh) ====== */
 async function loadList(){
   try{
+    setStatus("Tải danh sách...");
     const rawUrl = `https://raw.githubusercontent.com/${REPO}/main/data.json`;
     const res = await fetch(rawUrl);
-    if(!res.ok) { listEl.innerHTML = "<div style='grid-column:1/-1;color:#f87171'>Không lấy được data.json</div>"; return; }
+    if(!res.ok){
+      listEl.innerHTML = `<div style="grid-column:1/-1;color:#f87171">Không lấy được data.json (HTTP ${res.status})</div>`;
+      return;
+    }
     const data = await res.json();
-    if(!Array.isArray(data) || data.length === 0){ listEl.innerHTML = "<div style='grid-column:1/-1;color:var(--muted)'>Danh sách trống</div>"; return; }
-    listEl.innerHTML = data.map((it, idx) => `
+    if(!Array.isArray(data) || data.length === 0){
+      listEl.innerHTML = `<div style="grid-column:1/-1;color:var(--muted)">Danh sách trống</div>`;
+      setStatus("");
+      return;
+    }
+    listEl.innerHTML = data.map((it, idx)=>`
       <div class="file-card">
-        <div class="thumb"><img src="${escapeHtml(it.thumb)}" alt=""></div>
+        <div class="thumb"><img src="${escapeHtml(it.thumb_url || it.thumb || '')}" alt=""></div>
         <div class="meta">
           <div class="title">${escapeHtml(it.name)}</div>
           <div class="desc">${escapeHtml(it.desc || '')}</div>
           <div style="margin-top:8px" class="actions">
-            <a class="btn-small btn-download" href="${escapeHtml(it.file_url)}" target="_blank" rel="noopener"><button class="btn-small btn-download">Tải</button></a>
+            <a class="btn-small btn-download" href="${escapeHtml(it.file_url || it.file || '')}" target="_blank" rel="noopener"><button class="btn-small btn-download">Tải</button></a>
             <button class="btn-small btn-delete" onclick="deleteItem(${idx})">Xóa</button>
           </div>
         </div>
       </div>
     `).join('');
-  }catch(e){
-    listEl.innerHTML = "<div style='grid-column:1/-1;color:#f87171'>Lỗi tải danh sách: " + escapeHtml(e.message) + "</div>";
+    setStatus("");
+  }catch(err){
+    listEl.innerHTML = `<div style="grid-column:1/-1;color:#f87171">Lỗi tải danh sách: ${escapeHtml(err.message || err)}</div>`;
   }
 }
 
-/* ====== Lưu metadata vào data.json (dùng contents API để có sha) ====== */
-async function saveToDataJson(item){
-  const url = `https://api.github.com/repos/${REPO}/contents/data.json`;
-  // lấy sha + nội dung cũ
-  const j = await ghFetch(url, { method: 'GET' });
-  const old = JSON.parse(atob(j.content || 'W10='));
-  old.unshift(item);
-  const body = {
-    message: `Add file ${item.name}`,
-    content: btoa(JSON.stringify(old, null, 2)),
-    sha: j.sha
-  };
-  await ghFetch(url, { method: 'PUT', body: JSON.stringify(body) });
-}
-
-/* ====== Xóa asset (theo asset id) ====== */
-async function deleteAssetById(assetId){
-  const url = `https://api.github.com/repos/${REPO}/releases/assets/${assetId}`;
-  // DELETE trả về 204 nếu ok
-  const token = tokenEl.value.trim();
-  const res = await fetch(url, {
-    method: 'DELETE',
-    headers: { Authorization: "token " + token, Accept: "application/vnd.github+json" }
-  });
-  if(!res.ok){
-    const text = await res.text();
-    throw new Error(`Không xóa được asset ${assetId}: ${res.status} ${text}`);
-  }
-}
-
-/* ====== Xóa mục (xóa asset thumb + file, cập nhật data.json) ====== */
-async function deleteItem(index){
-  try{
-    setStatus("Đang xóa..."); setBar(5);
-    // lấy data + sha
-    const url = `https://api.github.com/repos/${REPO}/contents/data.json`;
-    const j = await ghFetch(url, { method: 'GET' });
-    const arr = JSON.parse(atob(j.content || 'W10='));
-    if(!arr[index]) throw new Error("Mục không tồn tại.");
-    const item = arr[index];
-
-    // item.file_asset_id and item.thumb_asset_id phải tồn tại
-    if(item.file_asset_id) {
-      setStatus("Xóa asset file id: " + item.file_asset_id);
-      await deleteAssetById(item.file_asset_id);
-      setBar(30);
-    }
-    if(item.thumb_asset_id) {
-      setStatus("Xóa asset thumbnail id: " + item.thumb_asset_id);
-      await deleteAssetById(item.thumb_asset_id);
-      setBar(60);
-    }
-
-    // xóa khỏi mảng và cập nhật data.json
-    arr.splice(index,1);
-    const putBody = {
-      message: "Remove file from data.json",
-      content: btoa(JSON.stringify(arr, null, 2)),
-      sha: j.sha
-    };
-    await ghFetch(url, { method: 'PUT', body: JSON.stringify(putBody) });
-    setStatus("Đã xóa");
-    setBar(100);
-    await loadList();
-  }catch(e){
-    setStatus("Lỗi xóa: " + e.message);
-  }
-}
-
-/* ====== Escape HTML để hiển thị an toàn ====== */
+/* ====== Escape HTML ====== */
 function escapeHtml(s){
   if(!s && s !== 0) return "";
-  return String(s)
-    .replaceAll("&","&amp;")
-    .replaceAll("<","&lt;")
-    .replaceAll(">","&gt;")
-    .replaceAll('"',"&quot;")
-    .replaceAll("'", "&#039;");
+  return String(s).replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll("\"","&quot;").replaceAll("'","&#039;");
 }
 
-/* ====== Hàm chính: startUpload ====== */
+/* ====== Hàm upload tổng (chạy khi bấm) ====== */
 async function startUpload(){
   try{
-    setStatus(""); setBar(0);
-    const token = tokenEl.value.trim();
-    const name = titleEl.value.trim();
-    const desc = descEl.value.trim();
-    const thumb = thumbEl.files && thumbEl.files[0];
-    const file = fileEl.files && fileEl.files[0];
+    setStatus("");
+    setBar(0);
+
+    const token = tokenEl.value && tokenEl.value.trim();
+    const name = titleEl.value && titleEl.value.trim();
+    const desc = descEl.value && descEl.value.trim();
+    const thumbFile = thumbEl.files && thumbEl.files[0];
+    const mainFile = fileEl.files && fileEl.files[0];
 
     if(!token) throw new Error("Nhập GitHub token (ghp_...)");
     if(!name) throw new Error("Nhập tên file");
-    if(!thumb) throw new Error("Chưa chọn thumbnail");
-    if(!file) throw new Error("Chưa chọn file upload");
+    if(!thumbFile) throw new Error("Chưa chọn thumbnail");
+    if(!mainFile) throw new Error("Chưa chọn file chính");
 
-    // 1) lấy release id
+    // 1) release id
     setStatus("Lấy release id...");
     setBar(5);
     const releaseId = await getReleaseId();
 
-    // 2) upload thumbnail asset
+    // 2) upload thumb
     setStatus("Upload thumbnail...");
-    setBar(10);
-    const thumbRes = await uploadAssetToRelease(releaseId, thumb, (p)=>{ setBar(10 + Math.round(p*0.3)); });
-    // thumbRes chứa id và browser_download_url
+    setBar(8);
+    const thumbRes = await uploadAssetToRelease(releaseId, thumbFile, (p)=>{ setBar(8 + Math.round(p*0.25)); });
     if(!thumbRes || !thumbRes.id) throw new Error("Upload thumbnail thất bại");
-    setBar(40);
+    setBar(35);
 
     // 3) upload main file
     setStatus("Upload file chính...");
-    const fileRes = await uploadAssetToRelease(releaseId, file, (p)=>{ setBar(40 + Math.round(p*0.5)); });
+    const fileRes = await uploadAssetToRelease(releaseId, mainFile, (p)=>{ setBar(35 + Math.round(p*0.55)); });
     if(!fileRes || !fileRes.id) throw new Error("Upload file thất bại");
     setBar(90);
 
-    // 4) lưu data vào data.json (lưu cả asset ids để có thể xóa)
-    setStatus("Ghi vào data.json...");
+    // 4) lưu vào data.json (lưu cả asset ids & URLs)
+    setStatus("Ghi metadata vào data.json...");
     const item = {
       name,
       desc,
-      thumb_url: thumbRes.browser_download_url,
-      file_url: fileRes.browser_download_url,
+      thumb_url: thumbRes.browser_download_url || thumbRes.browser_download_url,
+      file_url: fileRes.browser_download_url || fileRes.browser_download_url,
       thumb_asset_id: thumbRes.id,
       file_asset_id: fileRes.id,
       uploaded_at: new Date().toISOString()
     };
     await saveToDataJson(item);
-
     setBar(100);
     setStatus("✅ Upload hoàn tất!");
     await loadList();
@@ -296,9 +324,11 @@ async function startUpload(){
   }
 }
 
-/* ====== Khởi động: load danh sách ====== */
-loadList();
+/* ====== Bind event ====== */
+btnUpload.addEventListener('click', startUpload);
 
+/* ====== Init load list ====== */
+loadList();
 </script>
 </body>
 </html>
