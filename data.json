@@ -1,1 +1,8 @@
-[]
+[
+  {
+    "name": "APK Editor Pro",
+    "description": "app dùng để sửa file apk. mod app/game",
+    "thumbnail": "thumbs/APK Editor Pro thumbs.jpeg",
+    "file": "files/beta4.2.apk"
+  }
+]
