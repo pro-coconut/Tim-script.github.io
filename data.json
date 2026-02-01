@@ -1,8 +1,8 @@
 [
   {
     "name": "APK Editor Pro",
-    "description": "app dùng để sửa file apk. mod app/game",
-    "thumbnail": "https://raw.githubusercontent.com/pro-coconut/Tim-script.github.io/refs/heads/main/thumbs/APK%20Editor%20Pro%20thumbs.jpeg",
+    "desc": "App dùng để sửa file apk, mod game",
+    "thumb": "thumbs/APK Editor Pro thumbs.jpeg",
     "file": "files/beta4.2.apk"
   }
 ]
