@@ -1,36 +1,44 @@
 <!DOCTYPE html>
 <html lang="vi">
 <head>
-<meta charset="utf-8"/>
-<meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>Kho tải file của Tâm</title>
-
-<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700&display=swap" rel="stylesheet">
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Kho tải file</title>
 
 <style>
-*{box-sizing:border-box;margin:0;padding:0}
 body{
-  font-family:'Poppins',sans-serif;
-  background:linear-gradient(135deg,#0b1220,#0e1627);
-  color:#e6eef8;
+  margin:0;
+  font-family:Arial,Helvetica,sans-serif;
+  background:#0b1220;
+  color:white;
 }
 
-/* HEADER */
+/* ===== HEADER ===== */
 .header{
   position:sticky;
   top:0;
   z-index:1000;
   backdrop-filter:blur(12px);
   background:rgba(15,23,42,0.9);
-  padding:22px 16px;
-  text-align:center;
+  padding:18px 16px;
   border-bottom:1px solid #1f2a44;
+
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+}
+
+.header h1{
+  flex:1;
+  text-align:center;
+  font-size:22px;
+  background:linear-gradient(90deg,#38bdf8,#60a5fa);
+  -webkit-background-clip:text;
+  color:transparent;
 }
 
 .back-btn{
-  position:absolute;
-  left:16px;
-  top:18px;
   padding:10px 14px;
   border-radius:12px;
   background:linear-gradient(90deg,#38bdf8,#0ea5e9);
@@ -38,109 +46,82 @@ body{
   font-weight:700;
   text-decoration:none;
   transition:.25s;
+  white-space:nowrap;
 }
+
 .back-btn:hover{
   transform:translateY(-3px);
   box-shadow:0 8px 18px #38bdf855;
 }
 
-.header h1{
-  font-size:24px;
-  background:linear-gradient(90deg,#38bdf8,#60a5fa);
-  -webkit-background-clip:text;
-  color:transparent;
-}
-
-/* CONTAINER */
+/* ===== GRID ===== */
 .container{
-  max-width:1200px;
-  margin:auto;
-  padding:28px 16px 60px;
+  max-width:1100px;
+  margin:30px auto;
+  padding:16px;
 }
 
-/* GRID */
 .grid{
   display:grid;
-  grid-template-columns:repeat(auto-fill,minmax(270px,1fr));
-  gap:20px;
+  grid-template-columns:repeat(auto-fill,minmax(260px,1fr));
+  gap:18px;
 }
 
-/* CARD */
 .card{
   background:#1e293b;
-  border-radius:18px;
+  border-radius:14px;
   overflow:hidden;
-  border:1px solid #1f2a44;
   transition:.3s;
-  box-shadow:0 8px 20px #00000033;
-}
-.card:hover{
-  transform:translateY(-8px);
-  box-shadow:0 16px 40px #00000066;
+  box-shadow:0 10px 20px rgba(0,0,0,.4);
 }
 
-/* THUMB */
+.card:hover{
+  transform:translateY(-6px);
+}
+
 .thumb{
-  height:170px;
-  overflow:hidden;
+  height:150px;
   background:#071826;
 }
+
 .thumb img{
   width:100%;
   height:100%;
   object-fit:cover;
-  transition:.4s;
-}
-.card:hover .thumb img{
-  transform:scale(1.07);
 }
 
-/* CONTENT */
 .content{
-  padding:16px;
-}
-.title{
-  font-size:16px;
-  font-weight:600;
-  margin-bottom:6px;
-  min-height:42px;
-}
-.desc{
-  font-size:13px;
-  color:#94a3b8;
-  margin-bottom:14px;
-  min-height:36px;
+  padding:14px;
 }
 
-/* BUTTON */
-.btn{
-  display:inline-block;
-  padding:12px 16px;
-  border-radius:12px;
-  background:linear-gradient(90deg,#38bdf8,#0ea5e9);
-  color:#04293a;
+.title{
+  font-size:18px;
   font-weight:700;
-  text-decoration:none;
+  margin-bottom:6px;
+}
+
+.desc{
+  font-size:14px;
+  opacity:.8;
+  min-height:40px;
+}
+
+.download-btn{
+  margin-top:12px;
+  width:100%;
+  padding:10px;
+  border-radius:10px;
+  border:0;
+  font-weight:700;
+  cursor:pointer;
+  background:linear-gradient(90deg,#22c55e,#16a34a);
+  color:white;
   transition:.25s;
 }
-.btn:hover{
+
+.download-btn:hover{
   transform:translateY(-3px);
-  box-shadow:0 8px 18px #38bdf855;
-}
-
-/* EMPTY */
-.empty{
-  text-align:center;
-  grid-column:1/-1;
-  color:#94a3b8;
-  padding:40px;
-  font-size:15px;
-}
-
-/* MOBILE */
-@media(max-width:600px){
-  .thumb{height:140px}
-  .back-btn{padding:8px 10px;font-size:13px}
+  box-shadow:0 8px 18px #22c55e66;
 }
 </style>
 </head>
@@ -150,6 +131,7 @@ body{
 <div class="header">
   <a href="index.html" class="back-btn">← Về trang tìm script</a>
   <h1>📦 Kho tải file của Tâm</h1>
+  <div style="width:140px"></div>
 </div>
 
 <div class="container">
@@ -160,41 +142,35 @@ body{
 const REPO = "pro-coconut/Tim-script.github.io";
 const BRANCH = "main";
 
-async function load(){
+async function loadFiles(){
   try{
     const res = await fetch(`https://raw.githubusercontent.com/${REPO}/${BRANCH}/data.json`);
     const data = await res.json();
 
-    if(!data.length){
-      document.getElementById("list").innerHTML =
-        '<div class="empty">Chưa có file nào được thêm.</div>';
-      return;
-    }
-
-    document.getElementById("list").innerHTML = data.map(d=>`
+    const html = data.map(d=>`
       <div class="card">
         <div class="thumb">
-          <img src="https://raw.githubusercontent.com/${REPO}/${BRANCH}/${d.thumb}">
+          <img src="${d.thumb}" onerror="this.src='https://via.placeholder.com/300x150?text=No+Image'">
         </div>
         <div class="content">
           <div class="title">${d.name}</div>
           <div class="desc">${d.desc}</div>
-          <a class="btn"
-             href="https://raw.githubusercontent.com/${REPO}/${BRANCH}/${d.file}"
-             download>
-             ⬇ Tải xuống
+          <a href="${d.file}" download>
+            <button class="download-btn">Tải file</button>
           </a>
         </div>
       </div>
-    `).join('');
+    `).join("");
+
+    document.getElementById("list").innerHTML = html;
 
   }catch(e){
     document.getElementById("list").innerHTML =
-      '<div class="empty">Không đọc được data.json</div>';
+      "<p>Lỗi tải dữ liệu. Kiểm tra data.json</p>";
   }
 }
 
-load();
+loadFiles();
 </script>
 
 </body>
