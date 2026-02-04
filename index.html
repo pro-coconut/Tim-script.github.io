@@ -248,143 +248,181 @@ h2{
 </div>
 
 <script>
-/* ---------- Config ---------- */
-const API_BASE = 'https://scriptblox.com/api';
-const SEARCH_ENDPOINT = API_BASE + '/script/search';
-const SCRIPT_ENDPOINT = API_BASE + '/script'; // fetch details by id
+/* ========== CẤU HÌNH CRAWL (thay API) ========== */
+const SITE_BASE = 'https://scriptblox.com';
+const PROXY = 'https://api.allorigins.win/raw?url='; // proxy để tránh CORS
+const SCRIPT_PAGE_BASE = SITE_BASE + '/script';
 const PLACEHOLDER = 'https://i.ibb.co/8gbRfFsp/images.png';
 const MAX_PER_PAGE = 12;
-const THUMB_NORMALIZE_BASE = 'https://scriptblox.com';
 
 /* ---------- Utils ---------- */
 const qs = sel => document.querySelector(sel);
 function escapeHtml(s){ if(s === null || s === undefined) return ''; return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
-
-/* ---------- DOM Refs ---------- */
 const inputEl = qs('#q');
 const btnSearch = qs('#btnSearch');
 const resultsEl = qs('#results');
 const latestEl = qs('#latest');
 
-/* ---------- Cache for thumbs/details ---------- */
-const thumbCache = new Map(); // id -> url or null
-const detailCache = new Map(); // id -> full script detail
+/* ---------- Cache ---------- */
+const thumbCache = new Map();
+const detailCache = new Map();
 
-/* ---------- Normalize thumbnail URL ---------- */
+/* ---------- Normalize thumbnail URL (keep your original logic) ---------- */
 function normalizeThumbUrl(raw){
   if(!raw) return null;
   raw = String(raw).trim();
-  // if already absolute
   if(raw.startsWith('http://') || raw.startsWith('https://')) return raw;
-  // protocol-less e.g. //scriptblox.com/...
   if(raw.startsWith('//')) return location.protocol + raw;
-  // leading slash: /images/...
-  if(raw.startsWith('/')) return THUMB_NORMALIZE_BASE + raw;
-  // starts with images/ or images/script/...
+  if(raw.startsWith('/')) return SITE_BASE + raw;
   if(raw.startsWith('images/') || raw.startsWith('image/') || raw.startsWith('uploads/') || raw.startsWith('scripts/')) {
-    return THUMB_NORMALIZE_BASE + '/' + raw;
+    return SITE_BASE + '/' + raw;
   }
-  // contains "scriptblox.com" but missing scheme
   if(raw.includes('scriptblox.com')) {
     return (raw.startsWith('http') ? raw : 'https://' + raw);
   }
-  // fallback: prefix scriptblox
-  return THUMB_NORMALIZE_BASE + '/' + raw;
+  return SITE_BASE + '/' + raw;
 }
 
-/* ---------- Get thumbnail robustly (tries many fields, then details) ---------- */
+/* ---------- Fetch HTML via proxy (allorigins) ---------- */
+async function fetchHTML(url){
+  try{
+    const proxyUrl = PROXY + encodeURIComponent(url);
+    const res = await fetch(proxyUrl);
+    if(!res.ok) throw new Error('proxy fetch failed ' + res.status);
+    return await res.text();
+  }catch(e){
+    console.error('fetchHTML error', e);
+    return null;
+  }
+}
+
+/* ---------- Crawl search results page and build script objects ---------- */
+async function apiSearch(q, max = MAX_PER_PAGE){
+  const keyword = q && q.trim() ? q.trim() : 'script';
+  const searchUrl = `${SITE_BASE}/search?q=${encodeURIComponent(keyword)}`;
+  try{
+    const html = await fetchHTML(searchUrl);
+    if(!html) return [];
+    const doc = new DOMParser().parseFromString(html, 'text/html');
+
+    // find anchors to script pages
+    const anchors = [...doc.querySelectorAll("a[href^='/script/']")];
+
+    // dedupe by href and keep first occurrences
+    const seen = new Set();
+    const items = [];
+    for(const a of anchors){
+      const href = a.getAttribute('href') || '';
+      if(!href || seen.has(href)) continue;
+      seen.add(href);
+
+      // attempt to get title, image, game, author, views
+      const title = a.querySelector('h3')?.innerText?.trim() || a.querySelector('.title')?.innerText?.trim() || (a.textContent||'').trim().split('\n')[0];
+      const imgEl = a.querySelector('img');
+      const imgRaw = imgEl ? (imgEl.getAttribute('src') || imgEl.getAttribute('data-src') || '') : '';
+      const img = imgRaw ? normalizeThumbUrl(imgRaw) : '';
+
+      const game = a.querySelector('.game')?.innerText || a.querySelector('p')?.innerText || '';
+      const owner = a.querySelector('.owner')?.innerText || '';
+
+      // id (use href tail)
+      const id = href.replace(/^\/script\/+/, '').replace(/\/.*$/, '');
+
+      items.push({
+        _id: id,
+        title: title || id,
+        image: img || '',
+        game: { name: game || '' },
+        owner: { username: owner || '' },
+        views: 0,
+        href: href
+      });
+
+      if(items.length >= max) break;
+    }
+
+    return items;
+  }catch(e){
+    console.error('apiSearch crawl error', e);
+    return [];
+  }
+}
+
+/* ---------- If thumbnail not available in listing, crawl script detail page for image ---------- */
 async function getThumbUrl(scriptObj){
   if(!scriptObj) return PLACEHOLDER;
-  const id = scriptObj._id || scriptObj.id || scriptObj._id_str || scriptObj.id_str || (scriptObj.slug ? 's-'+scriptObj.slug : null);
+  const id = scriptObj._id || scriptObj.id || (scriptObj.href ? scriptObj.href.replace(/^\/script\//,'') : null);
+  if(!id) return PLACEHOLDER;
+  if(thumbCache.has(id)) return thumbCache.get(id);
 
-  if(id && thumbCache.has(id)) return thumbCache.get(id);
-
+  // prefer image field if present
   const tryFields = ['image','thumbnail','imageUrl','thumb','thumbUrl','coverImage','preview','cover','img','url','imagePath','thumbnailUrl'];
   for(const f of tryFields){
     const v = scriptObj[f];
     if(v){
       const n = normalizeThumbUrl(v);
-      thumbCache.set(id || f, n);
+      thumbCache.set(id, n);
       return n;
     }
   }
+  if(scriptObj.image){
+    const n = normalizeThumbUrl(scriptObj.image);
+    thumbCache.set(id,n);
+    return n;
+  }
 
-  // nested game/owner fields
+  // try nested game/owner props
   if(scriptObj.game){
     const v = scriptObj.game.imageUrl || scriptObj.game.thumbnail || scriptObj.game.thumb || scriptObj.game.icon || scriptObj.game.image;
-    if(v){
-      const n = normalizeThumbUrl(v);
-      if(id) thumbCache.set(id,n);
-      return n;
-    }
+    if(v){ const n=normalizeThumbUrl(v); thumbCache.set(id,n); return n; }
   }
   if(scriptObj.owner){
     const v = scriptObj.owner.avatar || scriptObj.owner.image || scriptObj.owner.avatarUrl;
-    if(v){
-      const n = normalizeThumbUrl(v);
-      if(id) thumbCache.set(id,n);
-      return n;
-    }
+    if(v){ const n=normalizeThumbUrl(v); thumbCache.set(id,n); return n; }
   }
 
-  // not found in summary -> fetch full detail and try again
-  if(id){
-    try{
-      let full = detailCache.get(id);
-      if(!full){
-        const res = await fetch(`${SCRIPT_ENDPOINT}/${encodeURIComponent(id)}`);
-        if(res.ok){
-          const j = await res.json();
-          full = j.script || j.result || j.data || j;
-          detailCache.set(id, full);
-        } else {
-          // if detail endpoint returns a relative object (rare), still continue
-        }
+  // fetch script detail page HTML and try to extract images
+  try{
+    const detailUrl = `${SCRIPT_PAGE_BASE}/${encodeURIComponent(id)}`;
+    const html = await fetchHTML(detailUrl);
+    if(html){
+      const doc = new DOMParser().parseFromString(html, 'text/html');
+
+      // try common selectors in script detail pages
+      // 1) first image in main content
+      let img = doc.querySelector('main img')?.getAttribute('src') || doc.querySelector('.script-cover img')?.getAttribute('src') || '';
+      if(!img){
+        // fallback: any img containing 'script' or 'images'
+        const imgs = [...doc.querySelectorAll('img')];
+        const found = imgs.find(i => {
+          const s = (i.getAttribute('src')||'').toLowerCase();
+          return s.includes('/images/') || s.includes('/script/') || s.includes('thumbnail') || s.includes('cover');
+        });
+        if(found) img = found.getAttribute('src') || '';
       }
-      if(full){
-        for(const f of tryFields){
-          const v = full[f];
-          if(v){
-            const n = normalizeThumbUrl(v);
-            thumbCache.set(id,n);
-            return n;
-          }
-        }
-        // nested arrays or properties
-        if(full.game){
-          const v = full.game.imageUrl || full.game.thumbnail || full.game.thumb;
-          if(v){ const n=normalizeThumbUrl(v); thumbCache.set(id,n); return n; }
-        }
-        if(full.images && Array.isArray(full.images) && full.images.length){
-          const n = normalizeThumbUrl(full.images[0]);
-          thumbCache.set(id,n);
-          return n;
-        }
-        if(full.assets && Array.isArray(full.assets) && full.assets.length){
-          const a = full.assets[0];
-          const v = (a && (a.url || a.path || a.src)) || a;
-          if(v){ const n=normalizeThumbUrl(v); thumbCache.set(id,n); return n; }
-        }
+      if(img){
+        const n = normalizeThumbUrl(img);
+        thumbCache.set(id, n);
+        return n;
       }
-    }catch(e){
-      console.debug('detail fetch failed for', id, e);
     }
+  }catch(e){
+    console.debug('detail page crawl failed for', id, e);
   }
 
-  // final fallback
-  if(id) thumbCache.set(id, PLACEHOLDER);
+  thumbCache.set(id, PLACEHOLDER);
   return PLACEHOLDER;
 }
 
-/* ---------- Card HTML (initial skeleton) ---------- */
+/* ---------- Card HTML ---------- */
 function createCardHTML(s){
-  const id = escapeHtml(s._id || s.id || '');
+  const id = escapeHtml(s._id || s.id || s.href || '');
   const title = escapeHtml(s.title || s.name || 'Untitled');
   const gameName = escapeHtml(s.game?.name || '-');
   const author = escapeHtml(s.owner?.username || s.owner?.name || '-');
   const views = escapeHtml(s.views || s.viewCount || 0);
   return `
-    <div class="card is-loading" data-id="${id}">
+    <div class="card is-loading" data-id="${id}" data-href="${escapeHtml(s.href || '/script/' + (s._id||''))}">
       <div class="thumb"><img loading="lazy" src="${PLACEHOLDER}" alt="${title}"></div>
       <div class="content">
         <div class="title">${title}</div>
@@ -398,42 +436,42 @@ function createCardHTML(s){
 /* ---------- Attach clicks ---------- */
 function attachCardClicks(container){
   container.querySelectorAll('.card').forEach(card=>{
-    card.onclick = ()=>{ const id = card.dataset.id; if(id) view(id); };
+    card.onclick = ()=>{ 
+      const href = card.getAttribute('data-href') || '';
+      if(href.startsWith('http')) window.open(href,'_blank');
+      else window.location.href = SITE_BASE + href;
+    };
   });
 }
 
-/* ---------- Render list with progressive thumb load + timeout fallback ---------- */
+/* ---------- Render list with progressive thumb load ---------- */
 async function renderScriptsList(scripts, container){
   if(!scripts || scripts.length === 0){
     container.innerHTML = '<div class="loader">Không có dữ liệu</div>';
     return;
   }
 
-  // render skeleton cards first
   container.innerHTML = scripts.map(s => createCardHTML(s)).join('');
   attachCardClicks(container);
 
   const cards = Array.from(container.querySelectorAll('.card'));
 
-  // for each script, load thumb
   await Promise.all(scripts.map(async (s, idx) => {
     const card = cards[idx];
     if(!card) return;
     const img = card.querySelector('img');
 
-    // set timeout to remove skeleton if image never loads (e.g., CORS or 404)
     let timedOut = false;
     const t = setTimeout(()=>{
       timedOut = true;
       card.classList.remove('is-loading');
       img.src = PLACEHOLDER;
-    }, 3500); // 3.5s timeout
+    }, 3500);
 
     try{
       const urlRaw = await getThumbUrl(s);
       const url = normalizeThumbUrl(urlRaw || PLACEHOLDER);
 
-      // set handlers
       const onLoad = () => {
         if(timedOut) return;
         clearTimeout(t);
@@ -456,7 +494,6 @@ async function renderScriptsList(scripts, container){
       img.addEventListener('load', onLoad);
       img.addEventListener('error', onErr);
 
-      // assign src (this triggers load/error)
       if(img.src !== url) img.src = url;
     }catch(e){
       clearTimeout(t);
@@ -466,38 +503,17 @@ async function renderScriptsList(scripts, container){
   }));
 }
 
-/* ---------- API wrapper ---------- */
-async function apiSearch(q, max = MAX_PER_PAGE){
-  const qParam = q && q.trim() ? q.trim() : 'script';
-  const url = `${SEARCH_ENDPOINT}?q=${encodeURIComponent(qParam)}&max=${max}`;
-  try{
-    const res = await fetch(url);
-    if(!res.ok) throw new Error('HTTP ' + res.status);
-    const j = await res.json();
-    return j.result?.scripts || j.scripts || j.data?.scripts || [];
-  }catch(e){
-    console.error('API search failed', e);
-    return [];
-  }
-}
-
 /* ---------- UI flows ---------- */
 async function loadLatest(){
   latestEl.innerHTML = '<div class="loader">Đang tải script mới...</div>';
-  const scripts = await apiSearch('script', 12);
+  const scripts = await apiSearch('script', MAX_PER_PAGE);
   await renderScriptsList(scripts, latestEl);
 }
 
 async function startSearch(q){
   resultsEl.innerHTML = '<div class="loader">Đang tìm kiếm...</div>';
-  const scripts = await apiSearch(q, 12);
+  const scripts = await apiSearch(q, MAX_PER_PAGE);
   await renderScriptsList(scripts, resultsEl);
-}
-
-/* ---------- Actions ---------- */
-function view(id){
-  // open view page
-  window.location.href = `view.html?id=${encodeURIComponent(id)}`;
 }
 
 /* ---------- Events ---------- */
