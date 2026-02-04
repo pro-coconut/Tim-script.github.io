@@ -1,48 +1,53 @@
-const STATIC_CACHE = 'sb-mini-static-v1';
-const RUNTIME_CACHE = 'sb-mini-runtime-v1';
+const STATIC_CACHE = 'sb-static-v2';
+const RUNTIME_CACHE = 'sb-runtime-v2';
+
 const PRECACHE = [
-  '/', '/index.html', '/view.html'
+  '/',
+  '/index.html',
+  '/view.html',
+  '/downloads.html'
 ];
 
-self.addEventListener('install', evt => {
-  evt.waitUntil(
+self.addEventListener('install', e => {
+  e.waitUntil(
     caches.open(STATIC_CACHE).then(cache => cache.addAll(PRECACHE))
   );
   self.skipWaiting();
 });
 
-self.addEventListener('activate', evt => {
-  evt.waitUntil(
-    caches.keys().then(keys => Promise.all(
-      keys.filter(k => k !== STATIC_CACHE && k !== RUNTIME_CACHE).map(k => caches.delete(k))
-    ))
+self.addEventListener('activate', e => {
+  e.waitUntil(
+    caches.keys().then(keys =>
+      Promise.all(
+        keys.filter(k => ![STATIC_CACHE, RUNTIME_CACHE].includes(k))
+            .map(k => caches.delete(k))
+      )
+    )
   );
   self.clients.claim();
 });
 
-self.addEventListener('fetch', evt => {
-  const reqUrl = new URL(evt.request.url);
+self.addEventListener('fetch', e => {
+  const url = new URL(e.request.url);
 
-  // runtime cache for scriptblox API and thumbnails
-  if(reqUrl.origin === 'https://scriptblox.com' || reqUrl.origin === 'https://thumbnails.roblox.com'){
-    evt.respondWith(
+  // Cache HTML crawl từ allorigins (proxy)
+  if (url.hostname.includes('allorigins.win')) {
+    e.respondWith(
       caches.open(RUNTIME_CACHE).then(async cache => {
-        try{
-          const fresh = await fetch(evt.request);
-          if(fresh && fresh.status === 200) cache.put(evt.request, fresh.clone());
+        try {
+          const fresh = await fetch(e.request);
+          cache.put(e.request, fresh.clone());
           return fresh;
-        }catch(err){
-          const cached = await cache.match(evt.request);
-          if(cached) return cached;
-          return new Response('Offline', { status: 503, statusText: 'Offline' });
+        } catch {
+          return cache.match(e.request);
         }
       })
     );
     return;
   }
 
-  // default: cache first for other assets
-  evt.respondWith(
-    caches.match(evt.request).then(resp => resp || fetch(evt.request).catch(() => caches.match('/index.html')))
+  // Mặc định: cache-first cho file web
+  e.respondWith(
+    caches.match(e.request).then(res => res || fetch(e.request))
   );
 });
